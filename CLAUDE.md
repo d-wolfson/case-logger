@@ -6,7 +6,7 @@ AI-powered surgical case logging application for neurosurgery residents. Built f
 ## Tech Stack
 - **Backend**: Node.js + Express
 - **Database**: SQLite (via sql.js)
-- **AI Vision**: Google Gemini 2.5 Flash API
+- **AI Vision**: Google Gemini 3 Flash Preview API
 - **Frontend**: Vanilla HTML/CSS/JavaScript
 - **Image Processing**: Client-side resize before upload (1600px max, 85% JPEG quality)
 

@@ -7,7 +7,7 @@
 ## What We Completed Today
 
 ### Core Features
-1. **Image Upload with AI Extraction** - Upload OR screenshots, AI (Gemini 2.5 Flash) extracts case data
+1. **Image Upload with AI Extraction** - Upload OR screenshots, AI (Gemini 3 Flash Preview) extracts case data
 2. **Batch Upload** - Multiple images processed together, auto-grouped by MRN + date
 3. **Manual Case Entry** - Option to enter cases without images
 4. **Case List View** - Searchable, with checkboxes for batch selection
@@ -57,7 +57,7 @@ Detect and warn when uploading an image that matches an existing case (by MRN + 
 ### Tech Stack
 - **Backend**: Node.js + Express (single server.js file)
 - **Database**: SQLite via sql.js (in-memory, persisted to database.db)
-- **AI**: Google Gemini 2.5 Flash API for image extraction and CPT matching
+- **AI**: Google Gemini 3 Flash Preview API for image extraction and CPT matching
 - **Frontend**: Vanilla HTML/CSS/JavaScript (no framework)
 - **Browser Automation**: Claude-in-Chrome MCP extension
 
