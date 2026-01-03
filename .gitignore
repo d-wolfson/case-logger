@@ -1,0 +1,18 @@
+# Dependencies
+node_modules/
+
+# Environment variables (contains API keys)
+.env
+
+# Database (contains patient data)
+database.db
+
+# Queue file
+acgme-queue.json
+
+# OS files
+.DS_Store
+Thumbs.db
+
+# Logs
+*.log

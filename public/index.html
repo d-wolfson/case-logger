@@ -1,0 +1,312 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Case Logger - Neurosurgery</title>
+  <link rel="stylesheet" href="style.css">
+</head>
+<body>
+  <div class="container">
+    <!-- Header -->
+    <header>
+      <h1>Surgical Log</h1>
+    </header>
+
+    <!-- Tab Navigation -->
+    <nav class="tabs">
+      <button class="tab active" data-tab="upload">Upload</button>
+      <button class="tab" data-tab="cases">My Cases</button>
+      <button class="tab" data-tab="table">Table</button>
+      <button class="tab" data-tab="stats">Stats</button>
+      <button class="tab" data-tab="export">Export</button>
+    </nav>
+
+    <!-- Upload Tab -->
+    <section id="upload" class="tab-content active">
+      <div class="upload-area" id="dropZone">
+        <div class="upload-icon">📷</div>
+        <p>Drag & drop images here</p>
+        <p class="small">Upload one or many cases - auto-detects and groups them</p>
+        <p class="small">(Epic screenshots, OR schedules, case cards, etc.)</p>
+        <input type="file" id="fileInput" accept="image/*" multiple hidden>
+      </div>
+
+      <div class="manual-entry-option">
+        <span>or</span>
+        <button type="button" class="btn secondary" id="manualEntryBtn">Enter Manually</button>
+      </div>
+
+      <!-- Extraction Results -->
+      <div id="extractionResults" class="hidden">
+        <h2>Extracted Data</h2>
+        <p class="info">Review and edit the extracted information, then save:</p>
+
+        <form id="caseForm">
+          <!-- Row 1: Date and Patient Info -->
+          <div class="form-row">
+            <div class="form-group">
+              <label for="date_of_surgery">Date of Surgery</label>
+              <input type="text" id="date_of_surgery" name="date_of_surgery">
+            </div>
+            <div class="form-group">
+              <label for="patient_mrn">Patient MRN</label>
+              <input type="text" id="patient_mrn" name="patient_mrn">
+            </div>
+            <div class="form-group small">
+              <label for="patient_age">Age</label>
+              <input type="text" id="patient_age" name="patient_age">
+            </div>
+            <div class="form-group small">
+              <label for="patient_gender">Gender</label>
+              <select id="patient_gender" name="patient_gender">
+                <option value="">--</option>
+                <option value="Male">Male</option>
+                <option value="Female">Female</option>
+              </select>
+            </div>
+          </div>
+
+          <!-- Row 2: Surgeons -->
+          <div class="form-row">
+            <div class="form-group">
+              <label for="attending_surgeon">Attending Surgeon</label>
+              <input type="text" id="attending_surgeon" name="attending_surgeon">
+            </div>
+            <div class="form-group">
+              <label for="anesthesia_staff">Anesthesia Staff</label>
+              <input type="text" id="anesthesia_staff" name="anesthesia_staff">
+            </div>
+          </div>
+
+          <!-- Row 3: Procedure -->
+          <div class="form-group">
+            <label for="procedure_name">Procedure Name</label>
+            <input type="text" id="procedure_name" name="procedure_name">
+          </div>
+
+          <!-- Row 4: Category -->
+          <div class="form-group">
+            <label for="case_category">Case Category (ACGME)</label>
+            <select id="case_category" name="case_category">
+              <option value="">-- Select Category --</option>
+              <optgroup label="Cranial">
+                <option value="Cranial: Tumor General">Cranial: Tumor General</option>
+                <option value="Cranial: Tumor Sellar/Parasellar">Cranial: Tumor Sellar/Parasellar</option>
+                <option value="Cranial: Trauma/Other">Cranial: Trauma/Other</option>
+                <option value="Cranial: Vascular Open">Cranial: Vascular Open</option>
+                <option value="Cranial: Vascular Endovascular">Cranial: Vascular Endovascular</option>
+                <option value="Cranial: Vascular Total">Cranial: Vascular Total</option>
+                <option value="Cranial: CSF Diversion/ETV/Other">Cranial: CSF Diversion/ETV/Other</option>
+                <option value="Cranial/Extracranial: Pain">Cranial/Extracranial: Pain</option>
+                <option value="Cranial/Extracranial: Functional Disorders">Cranial/Extracranial: Functional Disorders</option>
+                <option value="Cranial/Extracranial: Epilepsy">Cranial/Extracranial: Epilepsy</option>
+              </optgroup>
+              <optgroup label="Spinal">
+                <option value="Spinal: Anterior Cervical">Spinal: Anterior Cervical</option>
+                <option value="Spinal: Posterior Cervical">Spinal: Posterior Cervical</option>
+                <option value="Spinal: Thoracic/Lumbar/Sacral Instrumentation Fusion">Spinal: Thoracic/Lumbar/Sacral Instrumentation Fusion</option>
+                <option value="Spinal: Lumbar Laminectomy/Laminotomy">Spinal: Lumbar Laminectomy/Laminotomy</option>
+                <option value="Spinal: Stimulation/Lesion/Pump/Other">Spinal: Stimulation/Lesion/Pump/Other</option>
+              </optgroup>
+              <optgroup label="Peripheral Nerve">
+                <option value="Peripheral Nerve">Peripheral Nerve</option>
+              </optgroup>
+              <optgroup label="Pediatric">
+                <option value="Pediatric: Cranial Tumor">Pediatric: Cranial Tumor</option>
+                <option value="Pediatric: Cranial Trauma/Other">Pediatric: Cranial Trauma/Other</option>
+                <option value="Pediatric: CSF Diversion/ETV/Other">Pediatric: CSF Diversion/ETV/Other</option>
+                <option value="Pediatric: Spine">Pediatric: Spine</option>
+              </optgroup>
+            </select>
+            <span class="hint" id="categoryHint"></span>
+          </div>
+
+          <!-- Row 5: CPT, Laterality, Duration -->
+          <div class="form-row">
+            <div class="form-group">
+              <label for="cpt_code">CPT Code</label>
+              <input type="text" id="cpt_code" name="cpt_code" placeholder="e.g., 63012">
+              <span class="hint" id="cptHint"></span>
+            </div>
+            <div class="form-group">
+              <label for="laterality">Laterality</label>
+              <select id="laterality" name="laterality">
+                <option value="N/A">N/A</option>
+                <option value="Right">Right</option>
+                <option value="Left">Left</option>
+                <option value="Bilateral">Bilateral</option>
+              </select>
+            </div>
+            <div class="form-group">
+              <label for="case_duration">Case Duration</label>
+              <input type="text" id="case_duration" name="case_duration">
+            </div>
+          </div>
+
+          <!-- Row 5: Notes -->
+          <div class="form-group">
+            <label for="other_details">Notes (optional)</label>
+            <textarea id="other_details" name="other_details" rows="2" placeholder="Any additional notes..."></textarea>
+          </div>
+
+          <input type="hidden" id="raw_text" name="raw_text">
+          <input type="hidden" id="filename" name="filename">
+          <input type="hidden" id="cpt_inferred_note" name="cpt_inferred_note">
+
+          <div class="button-group">
+            <button type="submit" class="btn primary">Save Case</button>
+            <button type="button" class="btn secondary" id="clearForm">Clear</button>
+          </div>
+        </form>
+      </div>
+
+      <!-- Processing Indicator -->
+      <div id="processing" class="hidden">
+        <div class="spinner"></div>
+        <p id="processingText">Analyzing images...</p>
+        <p class="small" id="progressLabel"></p>
+      </div>
+
+      <!-- Batch Review Queue (for multiple cases) -->
+      <div id="batchReviewQueue" class="hidden">
+        <div class="batch-header">
+          <h2>Review Cases</h2>
+          <p class="info">Found <span id="caseCount">0</span> cases. Review each one:</p>
+        </div>
+
+        <div id="batchCasesList">
+          <!-- Grouped cases will appear here -->
+        </div>
+
+        <div class="batch-actions">
+          <button class="btn primary" id="saveAllCasesBtn">Save All Cases</button>
+          <button class="btn secondary" id="clearBatchBtn">Clear All</button>
+        </div>
+      </div>
+    </section>
+
+    <!-- Cases Tab -->
+    <section id="cases" class="tab-content">
+      <div class="search-bar">
+        <input type="text" id="searchInput" placeholder="Search by procedure, surgeon, CPT code...">
+        <button id="searchBtn" class="btn">Search</button>
+      </div>
+
+      <!-- Batch Actions Bar -->
+      <div id="batchActionsBar" class="batch-actions-bar hidden">
+        <label class="select-all-label">
+          <input type="checkbox" id="selectAllCases"> Select All
+        </label>
+        <span id="selectedCount">0 selected</span>
+        <div class="batch-buttons">
+          <button id="deleteSelectedBtn" class="btn danger">Delete Selected</button>
+          <button id="submitToAcgmeBtn" class="btn primary">Submit to ACGME</button>
+          <button id="clearQueueBtn" class="btn secondary">Clear Queue</button>
+        </div>
+      </div>
+
+      <div id="casesList">
+        <!-- Cases will be loaded here -->
+      </div>
+    </section>
+
+    <!-- Table Tab -->
+    <section id="table" class="tab-content">
+      <div class="table-view">
+        <h2>Case Summary</h2>
+        <div class="table-container">
+          <table id="casesTable">
+            <thead>
+              <tr>
+                <th>Date</th>
+                <th>MRN</th>
+                <th>Procedure</th>
+                <th>CPT</th>
+                <th>Attending</th>
+                <th>Category</th>
+                <th>ACGME</th>
+              </tr>
+            </thead>
+            <tbody id="casesTableBody">
+              <!-- Table rows will be loaded here -->
+            </tbody>
+          </table>
+        </div>
+      </div>
+    </section>
+
+    <!-- Stats Tab -->
+    <section id="stats" class="tab-content">
+      <div class="stats-view">
+        <h2>Analytics Dashboard</h2>
+
+        <!-- Overview Stats -->
+        <div class="stats-panel" id="statsPanel">
+          <div class="stat-card highlight">
+            <div class="stat-value" id="statTotal">0</div>
+            <div class="stat-label">Total Cases</div>
+          </div>
+          <div class="stat-card">
+            <div class="stat-value" id="statSubmitted">0</div>
+            <div class="stat-label">ACGME Submitted</div>
+          </div>
+          <div class="stat-card">
+            <div class="stat-value" id="statPending">0</div>
+            <div class="stat-label">Pending</div>
+          </div>
+          <div class="stat-card">
+            <div class="stat-value" id="statAvgDuration">0</div>
+            <div class="stat-label">Avg Duration (min)</div>
+          </div>
+        </div>
+
+        <!-- Breakdown Sections -->
+        <div class="stats-grid">
+          <!-- By Category -->
+          <div class="stats-section">
+            <h3>By Category</h3>
+            <div id="statsByCategory" class="stats-breakdown"></div>
+          </div>
+
+          <!-- By Attending -->
+          <div class="stats-section">
+            <h3>By Attending</h3>
+            <div id="statsByAttending" class="stats-breakdown"></div>
+          </div>
+
+          <!-- By CPT Code -->
+          <div class="stats-section">
+            <h3>By CPT Code</h3>
+            <div id="statsByCpt" class="stats-breakdown"></div>
+          </div>
+
+          <!-- By Anesthesia -->
+          <div class="stats-section">
+            <h3>By Anesthesia Staff</h3>
+            <div id="statsByAnesthesia" class="stats-breakdown"></div>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <!-- Export Tab -->
+    <section id="export" class="tab-content">
+      <div class="export-options">
+        <h2>Export Your Case Log</h2>
+        <p>Download your cases in a format compatible with ACGME case log requirements.</p>
+
+        <div class="export-card">
+          <h3>CSV Export</h3>
+          <p>Download all cases as a CSV file that can be opened in Excel or uploaded to your case log system.</p>
+          <button id="exportCsv" class="btn primary">Download CSV</button>
+        </div>
+
+        <div id="exportStatus"></div>
+      </div>
+    </section>
+  </div>
+
+  <script src="app.js"></script>
+</body>
+</html>
