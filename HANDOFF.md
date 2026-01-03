@@ -2,6 +2,8 @@
 
 *Last updated: January 3, 2026*
 
+**GitHub**: https://github.com/d-wolfson/case-logger (private)
+
 ## What We Completed Today
 
 ### Core Features
@@ -31,20 +33,11 @@
 
 ## Immediate Next Steps
 
-### 1. GitHub Integration
-The codebase is not yet in version control. Next session should:
-```bash
-cd ~/Documents/Projects/case-logger
-git init
-git add .
-git commit -m "Initial commit: Case Logger v1.0"
-# Create repo on GitHub, then:
-git remote add origin git@github.com:USERNAME/case-logger.git
-git push -u origin main
-```
-
-### 2. Pre/Post-Op Imaging (From Roadmap)
+### 1. Pre/Post-Op Imaging (From Roadmap)
 Allow attaching full-quality images to existing cases for documentation.
+
+### 2. Duplicate Detection
+Detect and warn when uploading an image that matches an existing case (by MRN + date).
 
 ---
 

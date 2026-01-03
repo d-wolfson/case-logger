@@ -18,7 +18,10 @@ AI-powered surgical case logging application for neurosurgery residents. Built f
 - Batch upload: process many images at once, AI auto-groups by MRN + date
 - Manual case entry option (no image required)
 - Edit existing case entries
-- Searchable case database
+- Searchable case database with batch selection
+- Table view with hover tooltips for CPT descriptions
+- Stats/Analytics dashboard (by category, attending, CPT with avg duration, anesthesia)
+- ACGME submission queue with browser automation
 - CSV export for ACGME compliance
 
 ## Database Schema
@@ -37,11 +40,15 @@ case-logger/
 ├── server.js           # Express server, API routes, Gemini integration
 ├── package.json        # Dependencies
 ├── .env                # GEMINI_API_KEY (do not commit)
-├── database.db         # SQLite database file
-└── public/
-    ├── index.html      # Main UI with tabs (Upload, My Cases, Export)
-    ├── style.css       # Styling
-    └── app.js          # Frontend logic, image resize, form handling
+├── database.db         # SQLite database file (auto-created)
+├── acgme-queue.json    # Persisted queue for ACGME submission
+├── public/
+│   ├── index.html      # Main UI (5 tabs: Upload, My Cases, Table, Stats, Export)
+│   ├── style.css       # Green/sage theme styling
+│   └── app.js          # Frontend logic, image resize, form handling, stats
+└── .claude/
+    └── commands/
+        └── submit-acgme.md  # Instructions for ACGME browser automation
 ```
 
 ## API Endpoints
@@ -49,7 +56,14 @@ case-logger/
 - `POST /api/cases` - Save a case to database
 - `GET /api/cases` - Get all cases
 - `GET /api/cases/search?q=` - Search cases
+- `GET /api/cases/pending-acgme` - Get cases not yet submitted to ACGME
+- `PUT /api/cases/:id` - Update a case
 - `DELETE /api/cases/:id` - Delete a case
+- `POST /api/cases/:id/mark-submitted` - Mark case as submitted to ACGME
+- `POST /api/cases/:id/unmark-submitted` - Mark case as pending ACGME
+- `POST /api/acgme-queue` - Add case IDs to submission queue
+- `GET /api/acgme-queue` - Get queued cases
+- `DELETE /api/acgme-queue` - Clear the queue
 - `GET /api/export/csv` - Export all cases as CSV
 
 ## Running the App
@@ -63,7 +77,9 @@ node server.js
 - `GEMINI_API_KEY` - Google AI API key (stored in .env)
 
 ## Neurosurgery Attendings
-Munich, Fontes, Sani, Mallela, Wang, Dewald, Deutsch, O'Toole, Munoz, Chen, Crowley, Traynelis, Jimenez, Zelby, Luken, Boco
+Munich, Fontes, Sani, Mallela, Wang, Dewald, Deutsch, O'Toole, Munoz, Chen, Crowley, Traynelis, Jimenez, Zelby, Luken, Boco, Towner, Sierens
+
+*Note: Towner and Sierens cases use Site = "Other" in ACGME (not Rush)*
 
 ## CPT Code Reference
 The app includes a comprehensive neurosurgery CPT code reference for AI inference:
@@ -77,20 +93,23 @@ The app includes a comprehensive neurosurgery CPT code reference for AI inferenc
 ## Future Features (Prioritized)
 
 ### Completed
-- [x] Batch upload - multiple cases at once (can span days/weeks/months)
-      - AI auto-groups images by MRN + Date
-      - User reviews each grouped case, confirms/edits, saves all
+- [x] Batch upload - multiple cases at once (AI auto-groups by MRN + Date)
 - [x] Edit existing entries
 - [x] Case categories (ACGME-aligned taxonomy, AI infers + user confirms)
 - [x] Manual case entry (no image required)
 - [x] Neurosurgery attending filter (ignores co-attendings from other services)
+- [x] Case statistics dashboard (totals, breakdowns by category/attending/CPT/anesthesia)
+- [x] Table view with hover tooltips
+- [x] ACGME submission queue with browser automation
+- [x] Microdissection auto-check for tumor cases
 
 ### High Priority
 - [ ] Attach pre/post-op imaging to cases (full quality storage)
+- [ ] Duplicate detection on upload
 
 ### Nice to Have
-- [ ] Enhanced UI with neurosurgery-specific design
-- [ ] Case statistics dashboard (totals, breakdowns by category/attending)
+- [ ] Date range filtering in stats
+- [ ] Edit from table view (click row to edit)
 
 ### Not Needed
 - ~~Role tracking~~ (not relevant for workflow)
