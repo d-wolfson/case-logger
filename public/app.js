@@ -598,7 +598,7 @@ async function loadCasesTable() {
 
     const tbody = document.getElementById('casesTableBody');
     if (cases.length === 0) {
-      tbody.innerHTML = '<tr><td colspan="7" style="text-align: center; color: #666;">No cases yet. Upload some images to get started.</td></tr>';
+      tbody.innerHTML = '<tr><td colspan="8" style="text-align: center; color: #666;">No cases yet. Upload some images to get started.</td></tr>';
       return;
     }
 
@@ -614,6 +614,9 @@ async function loadCasesTable() {
         <td class="truncate-cell" title="${escapeHtml(cptTitle)}">${cptDisplay}</td>
         <td class="truncate-cell" title="${escapeHtml(c.attending_surgeon) || ''}">${truncate(c.attending_surgeon, 20) || '-'}</td>
         <td class="truncate-cell" title="${escapeHtml(c.case_category) || ''}">${truncate(c.case_category, 20) || '-'}</td>
+        <td style="text-align: center;">
+          ${c.image_count > 0 ? `<span class="img-badge" onclick="openAttachmentModal(${c.id})" title="View attachments">📎${c.image_count}</span>` : '-'}
+        </td>
         <td>
           <span class="acgme-badge ${c.submitted_to_acgme ? 'submitted' : 'pending'}"
                 onclick="toggleAcgmeStatus(${c.id}, ${c.submitted_to_acgme ? 'true' : 'false'}); loadCasesTable();"
@@ -753,7 +756,7 @@ function renderCptBreakdown(containerId, cases) {
         <div class="breakdown-bar-fill" style="width: ${(item.count / maxCount) * 100}%"></div>
       </div>
       <span class="breakdown-value">${item.count}</span>
-      ${item.avgDuration ? `<span class="breakdown-meta">${item.avgDuration}m avg</span>` : ''}
+      <span class="breakdown-meta">${item.avgDuration ? `${item.avgDuration}m avg` : ''}</span>
     </div>
   `}).join('');
 }
@@ -1216,6 +1219,11 @@ function displayCases(cases) {
                   onclick="event.stopPropagation(); toggleAcgmeStatus(${c.id}, ${c.submitted_to_acgme ? 'true' : 'false'})"
                   title="Click to toggle ACGME status">
               ${c.submitted_to_acgme ? '✓ ACGME' : '○ Pending'}
+            </span>
+            <span class="attachment-badge ${c.image_count > 0 ? 'has-images' : ''}" id="attach-badge-${c.id}"
+                  onclick="event.stopPropagation(); openAttachmentModal(${c.id})"
+                  title="Manage attachments">
+              📎${c.image_count > 0 ? ` ${c.image_count}` : ''}
             </span>
           </h3>
         </div>
@@ -1830,4 +1838,118 @@ document.getElementById('cpt_code')?.addEventListener('input', () => {
   if (cptHint) {
     cptHint.textContent = '';
   }
+});
+
+// --------------------------------------------
+// Image Attachment Modal
+// --------------------------------------------
+let currentAttachmentCaseId = null;
+
+// Open attachment modal for a case
+async function openAttachmentModal(caseId) {
+  currentAttachmentCaseId = caseId;
+  const modal = document.getElementById('attachmentModal');
+  const grid = document.getElementById('attachmentGrid');
+  const countSpan = document.getElementById('attachmentCount');
+
+  // Show modal
+  modal.classList.remove('hidden');
+  grid.innerHTML = '<p class="loading">Loading attachments...</p>';
+
+  try {
+    const response = await fetch(`/api/cases/${caseId}/images`);
+    const result = await response.json();
+
+    if (result.error) {
+      throw new Error(result.error);
+    }
+
+    const images = result.images || [];
+    countSpan.textContent = `(${images.length})`;
+
+    if (images.length === 0) {
+      grid.innerHTML = '<p class="empty-attachments">No attachments yet. Click "+ Add Images" to attach imaging.</p>';
+    } else {
+      grid.innerHTML = images.map(img => `
+        <div class="attachment-thumb" data-id="${img.id}">
+          <img src="/api/images/${img.id}" alt="${img.original_name}" onclick="window.open('/api/images/${img.id}', '_blank')">
+          <button class="delete-attachment" onclick="deleteAttachment(${img.id})" title="Delete">&times;</button>
+          <div class="attachment-name">${img.original_name || 'image'}</div>
+        </div>
+      `).join('');
+    }
+  } catch (error) {
+    console.error('Error loading attachments:', error);
+    grid.innerHTML = '<p class="error">Error loading attachments</p>';
+  }
+}
+
+// Close attachment modal
+function closeAttachmentModal() {
+  const modal = document.getElementById('attachmentModal');
+  modal.classList.add('hidden');
+  currentAttachmentCaseId = null;
+}
+
+// Delete an attachment
+async function deleteAttachment(imageId) {
+  if (!confirm('Delete this attachment?')) {
+    return;
+  }
+
+  try {
+    const response = await fetch(`/api/images/${imageId}`, { method: 'DELETE' });
+    const result = await response.json();
+
+    if (result.success) {
+      // Reload the modal to show updated list
+      openAttachmentModal(currentAttachmentCaseId);
+      // Reload cases to update badge count
+      loadCases(document.getElementById('searchInput').value);
+    } else {
+      throw new Error(result.error);
+    }
+  } catch (error) {
+    console.error('Error deleting attachment:', error);
+    alert('Error deleting attachment: ' + error.message);
+  }
+}
+
+// Handle attachment file upload
+document.getElementById('attachmentInput')?.addEventListener('change', async (e) => {
+  const files = e.target.files;
+  if (!files.length || !currentAttachmentCaseId) return;
+
+  const formData = new FormData();
+  for (const file of files) {
+    formData.append('images', file);
+  }
+
+  const grid = document.getElementById('attachmentGrid');
+  grid.innerHTML = '<p class="loading">Uploading...</p>';
+
+  try {
+    const response = await fetch(`/api/cases/${currentAttachmentCaseId}/images`, {
+      method: 'POST',
+      body: formData
+    });
+    const result = await response.json();
+
+    if (result.error) {
+      throw new Error(result.error);
+    }
+
+    // Reload modal to show new images
+    openAttachmentModal(currentAttachmentCaseId);
+    // Reload cases to update badge count
+    loadCases(document.getElementById('searchInput').value);
+
+  } catch (error) {
+    console.error('Error uploading attachments:', error);
+    alert('Error uploading: ' + error.message);
+    openAttachmentModal(currentAttachmentCaseId);
+  }
+
+  // Clear input so same file can be selected again
+  e.target.value = '';
 });

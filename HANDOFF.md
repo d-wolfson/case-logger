@@ -15,6 +15,7 @@
 6. **Stats/Analytics Dashboard** - Breakdowns by category, attending, CPT code (with avg duration), anesthesia staff
 7. **ACGME Submission Queue** - Select cases in webapp, queue them, then say "process ACGME queue" to submit via browser automation
 8. **CSV Export** - Download all cases for ACGME compliance
+9. **Image Attachments** - Attach pre/post-op imaging to cases (full quality, stored in uploads/)
 
 ### ACGME Browser Automation
 - Fills Case ID, Date, Case Year (6), Role (Lead Resident Surgeon), Site, Attending, Patient Type, CPT Code
@@ -33,11 +34,11 @@
 
 ## Immediate Next Steps
 
-### 1. Pre/Post-Op Imaging (From Roadmap)
-Allow attaching full-quality images to existing cases for documentation.
-
-### 2. Duplicate Detection
+### 1. Duplicate Detection
 Detect and warn when uploading an image that matches an existing case (by MRN + date).
+
+### 2. Date Range Filtering
+Add date range filter to stats dashboard for time-based analysis.
 
 ---
 
@@ -74,6 +75,7 @@ case-logger/
 ├── server.js              # All backend logic, API routes, Gemini integration
 ├── database.db            # SQLite database (auto-created)
 ├── acgme-queue.json       # Persisted queue for ACGME submission
+├── uploads/               # Case image attachments (uploads/{case_id}/)
 ├── public/
 │   ├── index.html         # Main UI (5 tabs: Upload, My Cases, Table, Stats, Export)
 │   ├── style.css          # All styling (green/sage theme)
@@ -92,6 +94,11 @@ cases (
   case_category, laterality, case_duration, anesthesia_staff,
   other_details, raw_extracted_text, image_filename, created_at,
   submitted_to_acgme INTEGER DEFAULT 0
+)
+
+case_images (
+  id, case_id, filename, original_name, mime_type, size_bytes, created_at
+  -- Foreign key to cases(id) with CASCADE delete
 )
 ```
 

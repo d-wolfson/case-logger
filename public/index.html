@@ -225,6 +225,7 @@
                 <th>CPT</th>
                 <th>Attending</th>
                 <th>Category</th>
+                <th>Img</th>
                 <th>ACGME</th>
               </tr>
             </thead>
@@ -305,6 +306,28 @@
         <div id="exportStatus"></div>
       </div>
     </section>
+  </div>
+
+  <!-- Image Attachment Modal -->
+  <div id="attachmentModal" class="modal hidden">
+    <div class="modal-overlay" onclick="closeAttachmentModal()"></div>
+    <div class="modal-content">
+      <div class="modal-header">
+        <h3>Attachments <span id="attachmentCount"></span></h3>
+        <button class="modal-close" onclick="closeAttachmentModal()">&times;</button>
+      </div>
+      <div class="modal-body">
+        <div id="attachmentGrid" class="attachment-grid">
+          <!-- Thumbnails load here -->
+        </div>
+        <div class="attachment-upload">
+          <label class="upload-btn">
+            <input type="file" id="attachmentInput" accept="image/*,.pdf" multiple hidden>
+            + Add Images
+          </label>
+        </div>
+      </div>
+    </div>
   </div>
 
   <script src="app.js"></script>

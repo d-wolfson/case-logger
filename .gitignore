@@ -7,6 +7,9 @@ node_modules/
 # Database (contains patient data)
 database.db
 
+# Uploaded images (contains patient imaging)
+uploads/
+
 # Queue file
 acgme-queue.json
 

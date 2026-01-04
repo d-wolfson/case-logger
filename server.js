@@ -38,11 +38,45 @@ app.use(express.json());  // Allow JSON data in requests
 // --------------------------------------------
 // STEP 4: Set up file upload handling
 // --------------------------------------------
-// Configure where uploaded images are stored temporarily
+// Configure where uploaded images are stored temporarily (for AI extraction)
 const storage = multer.memoryStorage();  // Store in memory (not disk)
 const upload = multer({
   storage: storage,
   limits: { fileSize: 10 * 1024 * 1024 }  // Max 10MB per image
+});
+
+// Configure disk storage for image attachments
+const UPLOADS_DIR = path.join(__dirname, 'uploads');
+if (!fs.existsSync(UPLOADS_DIR)) {
+  fs.mkdirSync(UPLOADS_DIR, { recursive: true });
+}
+
+const attachmentStorage = multer.diskStorage({
+  destination: (req, file, cb) => {
+    const caseDir = path.join(UPLOADS_DIR, req.params.id);
+    if (!fs.existsSync(caseDir)) {
+      fs.mkdirSync(caseDir, { recursive: true });
+    }
+    cb(null, caseDir);
+  },
+  filename: (req, file, cb) => {
+    const timestamp = Date.now();
+    const safeName = file.originalname.replace(/[^a-zA-Z0-9.-]/g, '_');
+    cb(null, `${timestamp}-${safeName}`);
+  }
+});
+
+const uploadAttachment = multer({
+  storage: attachmentStorage,
+  limits: { fileSize: 50 * 1024 * 1024 },  // Max 50MB per attachment
+  fileFilter: (req, file, cb) => {
+    const allowedTypes = ['image/jpeg', 'image/png', 'image/gif', 'image/webp', 'application/pdf'];
+    if (allowedTypes.includes(file.mimetype)) {
+      cb(null, true);
+    } else {
+      cb(new Error('Invalid file type. Only images and PDFs allowed.'));
+    }
+  }
 });
 
 // --------------------------------------------
@@ -107,6 +141,20 @@ async function initDatabase() {
       // Column already exists, ignore
     }
   }
+
+  // Create the case_images table for attachments
+  db.run(`
+    CREATE TABLE IF NOT EXISTS case_images (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      case_id INTEGER NOT NULL,
+      filename TEXT NOT NULL,
+      original_name TEXT,
+      mime_type TEXT,
+      size_bytes INTEGER,
+      created_at TEXT DEFAULT CURRENT_TIMESTAMP,
+      FOREIGN KEY (case_id) REFERENCES cases(id) ON DELETE CASCADE
+    )
+  `);
 
   // Save the database to disk
   saveDatabase();
@@ -747,7 +795,14 @@ app.post('/api/cases', (req, res) => {
 // Route: Get all cases (for display and search)
 app.get('/api/cases', (req, res) => {
   try {
-    const results = db.exec('SELECT * FROM cases ORDER BY created_at DESC');
+    // Join with case_images to get attachment count
+    const results = db.exec(`
+      SELECT c.*, COUNT(ci.id) as image_count
+      FROM cases c
+      LEFT JOIN case_images ci ON c.id = ci.case_id
+      GROUP BY c.id
+      ORDER BY c.created_at DESC
+    `);
 
     if (results.length === 0) {
       return res.json([]);
@@ -776,12 +831,15 @@ app.get('/api/cases/search', (req, res) => {
   try {
     const query = req.query.q || '';
     const results = db.exec(`
-      SELECT * FROM cases
-      WHERE procedure_name LIKE '%${query}%'
-         OR attending_surgeon LIKE '%${query}%'
-         OR cpt_code LIKE '%${query}%'
-         OR other_details LIKE '%${query}%'
-      ORDER BY created_at DESC
+      SELECT c.*, COUNT(ci.id) as image_count
+      FROM cases c
+      LEFT JOIN case_images ci ON c.id = ci.case_id
+      WHERE c.procedure_name LIKE '%${query}%'
+         OR c.attending_surgeon LIKE '%${query}%'
+         OR c.cpt_code LIKE '%${query}%'
+         OR c.other_details LIKE '%${query}%'
+      GROUP BY c.id
+      ORDER BY c.created_at DESC
     `);
 
     if (results.length === 0) {
@@ -1067,6 +1125,140 @@ app.post('/api/cases/:id/unmark-submitted', (req, res) => {
   } catch (error) {
     console.error('❌ Error unmarking case:', error);
     res.status(500).json({ error: 'Failed to unmark case' });
+  }
+});
+
+// --------------------------------------------
+// STEP 8.5: Image Attachment Endpoints
+// --------------------------------------------
+
+// Route: Upload image(s) to a case
+app.post('/api/cases/:id/images', uploadAttachment.array('images', 10), (req, res) => {
+  try {
+    const caseId = req.params.id;
+
+    // Verify case exists
+    const caseCheck = db.exec(`SELECT id FROM cases WHERE id = ?`, [caseId]);
+    if (caseCheck.length === 0 || caseCheck[0].values.length === 0) {
+      return res.status(404).json({ error: 'Case not found' });
+    }
+
+    const uploaded = [];
+    for (const file of req.files) {
+      db.run(`
+        INSERT INTO case_images (case_id, filename, original_name, mime_type, size_bytes)
+        VALUES (?, ?, ?, ?, ?)
+      `, [caseId, file.filename, file.originalname, file.mimetype, file.size]);
+
+      const result = db.exec(`SELECT last_insert_rowid() as id`);
+      const imageId = result[0].values[0][0];
+
+      uploaded.push({
+        id: imageId,
+        filename: file.filename,
+        original_name: file.originalname,
+        mime_type: file.mimetype,
+        size_bytes: file.size
+      });
+    }
+
+    saveDatabase();
+    console.log(`📎 Attached ${uploaded.length} image(s) to case ${caseId}`);
+    res.json({ success: true, images: uploaded });
+  } catch (error) {
+    console.error('❌ Error uploading attachment:', error);
+    res.status(500).json({ error: 'Failed to upload attachment' });
+  }
+});
+
+// Route: Get images for a case
+app.get('/api/cases/:id/images', (req, res) => {
+  try {
+    const caseId = req.params.id;
+    const result = db.exec(`
+      SELECT id, filename, original_name, mime_type, size_bytes, created_at
+      FROM case_images WHERE case_id = ? ORDER BY created_at DESC
+    `, [caseId]);
+
+    if (result.length === 0 || result[0].values.length === 0) {
+      return res.json({ images: [] });
+    }
+
+    const images = result[0].values.map(row => ({
+      id: row[0],
+      filename: row[1],
+      original_name: row[2],
+      mime_type: row[3],
+      size_bytes: row[4],
+      created_at: row[5],
+      url: `/api/images/${row[0]}`
+    }));
+
+    res.json({ images });
+  } catch (error) {
+    console.error('❌ Error fetching images:', error);
+    res.status(500).json({ error: 'Failed to fetch images' });
+  }
+});
+
+// Route: Serve an image file
+app.get('/api/images/:imageId', (req, res) => {
+  try {
+    const imageId = req.params.imageId;
+    const result = db.exec(`
+      SELECT case_id, filename, mime_type FROM case_images WHERE id = ?
+    `, [imageId]);
+
+    if (result.length === 0 || result[0].values.length === 0) {
+      return res.status(404).json({ error: 'Image not found' });
+    }
+
+    const [caseId, filename, mimeType] = result[0].values[0];
+    const filePath = path.join(UPLOADS_DIR, String(caseId), filename);
+
+    if (!fs.existsSync(filePath)) {
+      return res.status(404).json({ error: 'Image file not found' });
+    }
+
+    res.setHeader('Content-Type', mimeType);
+    res.sendFile(filePath);
+  } catch (error) {
+    console.error('❌ Error serving image:', error);
+    res.status(500).json({ error: 'Failed to serve image' });
+  }
+});
+
+// Route: Delete an image
+app.delete('/api/images/:imageId', (req, res) => {
+  try {
+    const imageId = req.params.imageId;
+
+    // Get file info before deleting
+    const result = db.exec(`
+      SELECT case_id, filename FROM case_images WHERE id = ?
+    `, [imageId]);
+
+    if (result.length === 0 || result[0].values.length === 0) {
+      return res.status(404).json({ error: 'Image not found' });
+    }
+
+    const [caseId, filename] = result[0].values[0];
+    const filePath = path.join(UPLOADS_DIR, String(caseId), filename);
+
+    // Delete from database
+    db.run(`DELETE FROM case_images WHERE id = ?`, [imageId]);
+    saveDatabase();
+
+    // Delete file from disk
+    if (fs.existsSync(filePath)) {
+      fs.unlinkSync(filePath);
+    }
+
+    console.log(`🗑️ Deleted image ${imageId} from case ${caseId}`);
+    res.json({ success: true });
+  } catch (error) {
+    console.error('❌ Error deleting image:', error);
+    res.status(500).json({ error: 'Failed to delete image' });
   }
 });
 

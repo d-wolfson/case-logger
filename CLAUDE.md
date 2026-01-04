@@ -30,7 +30,13 @@ cases (
   id, date_of_surgery, patient_mrn, patient_age, patient_gender,
   attending_surgeon, procedure_name, cpt_code, cpt_inferred_note,
   case_category, laterality, case_duration, anesthesia_staff,
-  other_details, raw_extracted_text, image_filename, created_at
+  other_details, raw_extracted_text, image_filename, created_at,
+  submitted_to_acgme INTEGER DEFAULT 0
+)
+
+case_images (
+  id, case_id, filename, original_name, mime_type, size_bytes, created_at
+  -- Foreign key to cases(id) with CASCADE delete
 )
 ```
 
@@ -42,6 +48,7 @@ case-logger/
 ├── .env                # GEMINI_API_KEY (do not commit)
 ├── database.db         # SQLite database file (auto-created)
 ├── acgme-queue.json    # Persisted queue for ACGME submission
+├── uploads/            # Case image attachments (uploads/{case_id}/)
 ├── public/
 │   ├── index.html      # Main UI (5 tabs: Upload, My Cases, Table, Stats, Export)
 │   ├── style.css       # Green/sage theme styling
@@ -54,13 +61,17 @@ case-logger/
 ## API Endpoints
 - `POST /api/upload` - Upload images, returns AI-extracted data
 - `POST /api/cases` - Save a case to database
-- `GET /api/cases` - Get all cases
-- `GET /api/cases/search?q=` - Search cases
+- `GET /api/cases` - Get all cases (includes image_count)
+- `GET /api/cases/search?q=` - Search cases (includes image_count)
 - `GET /api/cases/pending-acgme` - Get cases not yet submitted to ACGME
 - `PUT /api/cases/:id` - Update a case
 - `DELETE /api/cases/:id` - Delete a case
 - `POST /api/cases/:id/mark-submitted` - Mark case as submitted to ACGME
 - `POST /api/cases/:id/unmark-submitted` - Mark case as pending ACGME
+- `POST /api/cases/:id/images` - Upload image attachments to a case
+- `GET /api/cases/:id/images` - Get list of images for a case
+- `GET /api/images/:imageId` - Serve an image file
+- `DELETE /api/images/:imageId` - Delete an image attachment
 - `POST /api/acgme-queue` - Add case IDs to submission queue
 - `GET /api/acgme-queue` - Get queued cases
 - `DELETE /api/acgme-queue` - Clear the queue
@@ -102,9 +113,9 @@ The app includes a comprehensive neurosurgery CPT code reference for AI inferenc
 - [x] Table view with hover tooltips
 - [x] ACGME submission queue with browser automation
 - [x] Microdissection auto-check for tumor cases
+- [x] Attach pre/post-op imaging to cases (full quality storage in uploads/)
 
 ### High Priority
-- [ ] Attach pre/post-op imaging to cases (full quality storage)
 - [ ] Duplicate detection on upload
 
 ### Nice to Have
