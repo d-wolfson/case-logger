@@ -583,6 +583,10 @@ document.querySelectorAll('.tab').forEach(tab => {
     if (tab.dataset.tab === 'table') {
       loadCasesTable();
     }
+    // Load follow-up queue
+    if (tab.dataset.tab === 'followup') {
+      loadFollowUpQueue();
+    }
     // Load stats when switching to stats tab
     if (tab.dataset.tab === 'stats') {
       loadStats();
@@ -605,7 +609,8 @@ const tableFilters = {
   category: '',
   startDate: '',
   endDate: '',
-  status: ''
+  status: '',
+  followUp: ''
 };
 
 const tableFilterAttending = document.getElementById('tableFilterAttending');
@@ -613,6 +618,7 @@ const tableFilterCategory = document.getElementById('tableFilterCategory');
 const tableFilterStartDate = document.getElementById('tableFilterStartDate');
 const tableFilterEndDate = document.getElementById('tableFilterEndDate');
 const tableFilterStatus = document.getElementById('tableFilterStatus');
+const tableFilterFollowUp = document.getElementById('tableFilterFollowUp');
 const clearTableFilters = document.getElementById('clearTableFilters');
 const tableSentinel = document.getElementById('tableSentinel');
 
@@ -645,7 +651,7 @@ function renderCasesTable(cases) {
     const emptyMessage = hasActiveFilters(tableFilters)
       ? 'No cases match current filters.'
       : 'No cases yet. Upload some images to get started.';
-    tbody.innerHTML = `<tr><td colspan="10" style="text-align: center; color: #666;">${emptyMessage}</td></tr>`;
+    tbody.innerHTML = `<tr><td colspan="11" style="text-align: center; color: #666;">${emptyMessage}</td></tr>`;
     const selectAll = document.getElementById('selectAllTable');
     if (selectAll) {
       selectAll.checked = false;
@@ -698,6 +704,12 @@ function renderTableRow(c) {
           </span>
         </td>
         <td style="text-align: center;">
+          ${c.follow_up_status && c.follow_up_status !== 'none' ? `
+          <span class="followup-badge small ${c.follow_up_status} ${isFollowUpDue(c) ? 'due' : ''}">
+            ${c.follow_up_status === 'done' ? 'Done' : isFollowUpDue(c) ? 'Past Due' : 'Scheduled'}
+          </span>` : '-'}
+        </td>
+        <td style="text-align: center;">
           <span class="acgme-badge ${c.submitted_to_acgme ? 'submitted' : 'pending'}"
                 onclick="toggleAcgmeStatus(${c.id}, ${c.submitted_to_acgme ? 'true' : 'false'}); loadCasesTable();"
                 title="Click to toggle">
@@ -743,6 +755,15 @@ function ensureTableObserver() {
 // Sort cases by field
 function sortCases(cases, field, ascending) {
   return [...cases].sort((a, b) => {
+    if (field === 'date_of_surgery') {
+      const dateA = parseCaseDateTime(a.date_of_surgery) || parseCaseDateTime(a.created_at);
+      const dateB = parseCaseDateTime(b.date_of_surgery) || parseCaseDateTime(b.created_at);
+      const timeA = dateA ? dateA.getTime() : 0;
+      const timeB = dateB ? dateB.getTime() : 0;
+      if (timeA !== timeB) return ascending ? timeA - timeB : timeB - timeA;
+      return (a.id || 0) - (b.id || 0);
+    }
+
     let valA = a[field] || '';
     let valB = b[field] || '';
 
@@ -823,17 +844,24 @@ tableFilterStatus?.addEventListener('change', () => {
   renderCasesTable(tableCasesCache);
 });
 
+tableFilterFollowUp?.addEventListener('change', () => {
+  tableFilters.followUp = normalizeSelectValue(tableFilterFollowUp.value);
+  renderCasesTable(tableCasesCache);
+});
+
 clearTableFilters?.addEventListener('click', () => {
   tableFilters.attending = '';
   tableFilters.category = '';
   tableFilters.startDate = '';
   tableFilters.endDate = '';
   tableFilters.status = '';
+  tableFilters.followUp = '';
   if (tableFilterAttending) tableFilterAttending.value = '';
   if (tableFilterCategory) tableFilterCategory.value = '';
   if (tableFilterStartDate) tableFilterStartDate.value = '';
   if (tableFilterEndDate) tableFilterEndDate.value = '';
   if (tableFilterStatus) tableFilterStatus.value = '';
+  if (tableFilterFollowUp) tableFilterFollowUp.value = '';
   renderCasesTable(tableCasesCache);
 });
 
@@ -956,20 +984,27 @@ async function loadStats() {
   }
 }
 
-function parseCaseDate(dateStr) {
+function parseCaseDateTime(dateStr) {
   if (!dateStr) return null;
-  if (dateStr.includes('-')) {
-    const parts = dateStr.split('-');
+  const trimmed = dateStr.trim();
+  const dateOnly = trimmed.split(' ')[0];
+
+  if (dateOnly.includes('-')) {
+    const parts = dateOnly.split('-');
     if (parts.length === 3) {
       const [year, month, day] = parts.map(Number);
-      return new Date(year, month - 1, day);
+      if (!Number.isNaN(year) && !Number.isNaN(month) && !Number.isNaN(day)) {
+        return new Date(year, month - 1, day);
+      }
     }
   }
-  if (dateStr.includes('/')) {
-    const parts = dateStr.split('/');
+  if (dateOnly.includes('/')) {
+    const parts = dateOnly.split('/');
     if (parts.length === 3) {
       const [month, day, year] = parts.map(Number);
-      return new Date(year, month - 1, day);
+      if (!Number.isNaN(year) && !Number.isNaN(month) && !Number.isNaN(day)) {
+        return new Date(year, month - 1, day);
+      }
     }
   }
   return null;
@@ -986,7 +1021,7 @@ function filterCasesByDateRange(cases, startValue, endValue) {
   }
 
   const filtered = cases.filter(c => {
-    const caseDate = parseCaseDate(c.date_of_surgery);
+    const caseDate = parseCaseDateTime(c.date_of_surgery);
     if (!caseDate) return false;
     if (start && caseDate < start) return false;
     if (end && caseDate > end) return false;
@@ -1551,6 +1586,9 @@ caseForm.addEventListener('submit', async (e) => {
     laterality: document.getElementById('laterality').value,
     case_duration: document.getElementById('case_duration').value,
     other_details: document.getElementById('other_details').value,
+    follow_up_note: document.getElementById('follow_up_note').value,
+    follow_up_status: document.getElementById('follow_up_status').value,
+    follow_up_due_date: document.getElementById('follow_up_due_date').value,
     raw_text: document.getElementById('raw_text').value,
     filename: document.getElementById('filename').value
   };
@@ -1655,6 +1693,7 @@ const filterCategory = document.getElementById('filterCategory');
 const filterStartDate = document.getElementById('filterStartDate');
 const filterEndDate = document.getElementById('filterEndDate');
 const filterStatus = document.getElementById('filterStatus');
+const filterFollowUp = document.getElementById('filterFollowUp');
 const clearFiltersBtn = document.getElementById('clearFiltersBtn');
 
 let casesCache = [];
@@ -1669,7 +1708,8 @@ const caseFilters = {
   category: '',
   startDate: '',
   endDate: '',
-  status: ''
+  status: '',
+  followUp: ''
 };
 
 function normalizeSelectValue(value) {
@@ -1695,7 +1735,14 @@ function updateSelectOptions(selectEl, values, placeholder) {
 }
 
 function hasActiveFilters(filters) {
-  return Boolean(filters.attending || filters.category || filters.status);
+  return Boolean(
+    filters.attending
+    || filters.category
+    || filters.status
+    || filters.startDate
+    || filters.endDate
+    || filters.followUp
+  );
 }
 
 function filterCasesByCriteria(cases, filters) {
@@ -1716,6 +1763,14 @@ function filterCasesByCriteria(cases, filters) {
     });
   }
 
+  if (filters.followUp) {
+    filtered = filtered.filter(c => {
+      const status = (c.follow_up_status || 'none').toLowerCase();
+      if (filters.followUp === 'due_now') return isFollowUpDue(c);
+      return status === filters.followUp;
+    });
+  }
+
   if (filters.startDate || filters.endDate) {
     const dateFiltered = filterCasesByDateRange(filtered, filters.startDate, filters.endDate);
     filtered = dateFiltered.filtered;
@@ -1724,9 +1779,27 @@ function filterCasesByCriteria(cases, filters) {
   return filtered;
 }
 
+function getCaseSortDate(caseData) {
+  const primary = parseCaseDateTime(caseData.date_of_surgery);
+  if (primary) return primary;
+  return parseCaseDateTime(caseData.created_at);
+}
+
+function sortCasesBySurgeryDateDesc(cases) {
+  return [...cases].sort((a, b) => {
+    const dateA = getCaseSortDate(a);
+    const dateB = getCaseSortDate(b);
+    const timeA = dateA ? dateA.getTime() : 0;
+    const timeB = dateB ? dateB.getTime() : 0;
+    if (timeA !== timeB) return timeB - timeA;
+    return (b.id || 0) - (a.id || 0);
+  });
+}
+
 function applyCaseFilters() {
   const filtered = filterCasesByCriteria(casesCache, caseFilters);
-  displayCases(filtered);
+  const sorted = sortCasesBySurgeryDateDesc(filtered);
+  displayCases(sorted);
 }
 
 // Load all cases
@@ -1777,6 +1850,31 @@ function displayCases(cases) {
   resetCasesInfiniteScroll(cases);
 }
 
+function isFollowUpDue(caseData) {
+  const status = (caseData.follow_up_status || 'none').toLowerCase();
+  if (status !== 'due') return false;
+  const dueDate = parseCaseDateTime(caseData.follow_up_due_date);
+  if (!dueDate) return true;
+  const today = new Date();
+  const startOfToday = new Date(today.getFullYear(), today.getMonth(), today.getDate());
+  return dueDate <= startOfToday;
+}
+
+function getFollowUpBadge(caseData) {
+  const status = (caseData.follow_up_status || 'none').toLowerCase();
+  if (status === 'none') return '';
+  const dueDate = caseData.follow_up_due_date || '';
+  const isPastDue = status === 'due' && isFollowUpDue(caseData);
+  const label = status === 'done'
+    ? 'Done'
+    : isPastDue
+      ? 'Past Due'
+      : 'Scheduled';
+  const dueText = dueDate ? ` • ${dueDate}` : '';
+  const dueClass = isPastDue ? 'due' : '';
+  return `<span class="followup-badge ${status} ${dueClass}">FU ${label}${dueText}</span>`;
+}
+
 function renderCaseCard(c) {
   return `
     <div class="case-card" data-id="${c.id}">
@@ -1799,6 +1897,7 @@ function renderCaseCard(c) {
         </div>
       </div>
       ${c.case_category ? `<div class="category-tag">${c.case_category}</div>` : ''}
+      ${getFollowUpBadge(c)}
       <div class="meta">
         <div class="meta-item"><strong>Date:</strong> ${c.date_of_surgery || 'N/A'}</div>
         <div class="meta-item"><strong>MRN:</strong> ${c.patient_mrn || 'N/A'}</div>
@@ -1903,19 +2002,122 @@ filterStatus?.addEventListener('change', () => {
   applyCaseFilters();
 });
 
+filterFollowUp?.addEventListener('change', () => {
+  caseFilters.followUp = normalizeSelectValue(filterFollowUp.value);
+  applyCaseFilters();
+});
+
 clearFiltersBtn?.addEventListener('click', () => {
   caseFilters.attending = '';
   caseFilters.category = '';
   caseFilters.startDate = '';
   caseFilters.endDate = '';
   caseFilters.status = '';
+  caseFilters.followUp = '';
   if (filterAttending) filterAttending.value = '';
   if (filterCategory) filterCategory.value = '';
   if (filterStartDate) filterStartDate.value = '';
   if (filterEndDate) filterEndDate.value = '';
   if (filterStatus) filterStatus.value = '';
+  if (filterFollowUp) filterFollowUp.value = '';
   applyCaseFilters();
 });
+
+// --------------------------------------------
+// Follow-Up Queue
+// --------------------------------------------
+const followupList = document.getElementById('followupList');
+const followupFilterStatus = document.getElementById('followupFilterStatus');
+
+function getFollowUpSortValue(caseData) {
+  const dueDate = parseCaseDateTime(caseData.follow_up_due_date);
+  if (!dueDate) return Number.MAX_SAFE_INTEGER;
+  return dueDate.getTime();
+}
+
+function filterFollowUpCases(cases, filterValue) {
+  const status = (filterValue || 'due_now').toLowerCase();
+  if (status === 'all') {
+    return cases.filter(c => (c.follow_up_status || 'none').toLowerCase() === 'due');
+  }
+  if (status === 'due_now') {
+    return cases.filter(c => isFollowUpDue(c));
+  }
+  return cases.filter(c => (c.follow_up_status || 'none').toLowerCase() === status);
+}
+
+function renderFollowUpList(cases) {
+  if (!followupList) return;
+  if (cases.length === 0) {
+    followupList.innerHTML = '<div class="empty-state"><div class="icon">🗂️</div><p>No follow-ups found</p></div>';
+    return;
+  }
+
+  followupList.innerHTML = cases.map(c => {
+    const dueDate = c.follow_up_due_date || 'N/A';
+    const status = (c.follow_up_status || 'none').toLowerCase();
+    const isPastDue = status === 'due' && isFollowUpDue(c);
+    const statusLabel = status === 'done' ? 'Done' : isPastDue ? 'Past Due' : 'Scheduled';
+    const badgeClass = isPastDue ? 'due' : '';
+    return `
+      <div class="followup-card">
+        <div class="followup-header">
+          <h3>${c.procedure_name || 'Unnamed Procedure'}</h3>
+          <span class="followup-badge ${status} ${badgeClass}">FU ${statusLabel}</span>
+        </div>
+        <div class="meta">
+          <div class="meta-item"><strong>Date:</strong> ${c.date_of_surgery || 'N/A'}</div>
+          <div class="meta-item"><strong>MRN:</strong> ${c.patient_mrn || 'N/A'}</div>
+          <div class="meta-item"><strong>Attending:</strong> ${c.attending_surgeon || 'N/A'}</div>
+          <div class="meta-item"><strong>Due:</strong> ${dueDate}</div>
+        </div>
+        ${c.follow_up_note ? `<p><strong>Follow-Up:</strong> ${escapeHtml(c.follow_up_note)}</p>` : ''}
+        <div class="actions">
+          <button class="btn secondary" onclick="markFollowUpDone(${c.id})">Mark Done</button>
+          <button class="btn" onclick="editCase(${c.id})">Edit</button>
+        </div>
+      </div>
+    `;
+  }).join('');
+}
+
+async function loadFollowUpQueue() {
+  try {
+    const response = await fetch('/api/cases');
+    const cases = await response.json();
+    const filtered = filterFollowUpCases(cases, followupFilterStatus?.value || 'due_now');
+    const sorted = [...filtered].sort((a, b) => getFollowUpSortValue(a) - getFollowUpSortValue(b));
+    renderFollowUpList(sorted);
+  } catch (error) {
+    console.error('Error loading follow-up queue:', error);
+    if (followupList) {
+      followupList.innerHTML = '<p class="error">Error loading follow-up queue</p>';
+    }
+  }
+}
+
+followupFilterStatus?.addEventListener('change', () => {
+  loadFollowUpQueue();
+});
+
+async function markFollowUpDone(caseId) {
+  try {
+    const response = await fetch(`/api/cases/${caseId}/follow-up`, {
+      method: 'PATCH',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ follow_up_status: 'done' })
+    });
+    const result = await response.json();
+    if (!result.success) {
+      throw new Error(result.error || 'Failed to update follow-up');
+    }
+    loadFollowUpQueue();
+    loadCases(searchInput?.value || '');
+    loadCasesTable();
+  } catch (error) {
+    alert('Error updating follow-up: ' + error.message);
+  }
+}
 
 // Delete a case
 async function deleteCase(id) {
@@ -1970,6 +2172,9 @@ async function editCase(id) {
     document.getElementById('laterality').value = caseData.laterality || 'N/A';
     document.getElementById('case_duration').value = caseData.case_duration || '';
     document.getElementById('other_details').value = caseData.other_details || '';
+    document.getElementById('follow_up_note').value = caseData.follow_up_note || '';
+    document.getElementById('follow_up_status').value = caseData.follow_up_status || 'none';
+    document.getElementById('follow_up_due_date').value = caseData.follow_up_due_date || '';
     document.getElementById('raw_text').value = caseData.raw_extracted_text || '';
     document.getElementById('filename').value = caseData.image_filename || '';
 
@@ -2283,6 +2488,24 @@ function displayBatchReviewQueue() {
           <label>Notes</label>
           <textarea data-field="other_details" rows="1" placeholder="Optional notes...">${c.data.other_details || ''}</textarea>
         </div>
+        <div class="form-group">
+          <label>Follow-Up</label>
+          <textarea data-field="follow_up_note" rows="1" placeholder="Imaging or clinical follow-up...">${c.data.follow_up_note || ''}</textarea>
+        </div>
+        <div class="form-row">
+          <div class="form-group">
+            <label>Follow-Up Status</label>
+            <select data-field="follow_up_status">
+              <option value="none" ${c.data.follow_up_status === 'none' ? 'selected' : ''}>None</option>
+              <option value="due" ${c.data.follow_up_status === 'due' ? 'selected' : ''}>Due</option>
+              <option value="done" ${c.data.follow_up_status === 'done' ? 'selected' : ''}>Done</option>
+            </select>
+          </div>
+          <div class="form-group">
+            <label>Follow-Up Due Date</label>
+            <input type="date" data-field="follow_up_due_date" value="${c.data.follow_up_due_date || ''}">
+          </div>
+        </div>
         <div class="batch-case-actions">
           <button class="btn danger" onclick="removeBatchCase(${c.id})">Remove Case</button>
         </div>
@@ -2339,6 +2562,9 @@ document.getElementById('saveAllCasesBtn').addEventListener('click', async () =>
       laterality: card.querySelector('[data-field="laterality"]').value,
       case_duration: card.querySelector('[data-field="case_duration"]').value,
       other_details: card.querySelector('[data-field="other_details"]').value,
+      follow_up_note: card.querySelector('[data-field="follow_up_note"]').value,
+      follow_up_status: card.querySelector('[data-field="follow_up_status"]').value,
+      follow_up_due_date: card.querySelector('[data-field="follow_up_due_date"]').value,
       raw_text: batchCase.data.raw_text || '',
       filename: batchCase.images.join(', ')
     };

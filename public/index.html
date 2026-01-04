@@ -18,6 +18,7 @@
       <button class="tab active" data-tab="upload">Upload</button>
       <button class="tab" data-tab="cases">My Cases</button>
       <button class="tab" data-tab="table">Table</button>
+      <button class="tab" data-tab="followup">Follow-Up</button>
       <button class="tab" data-tab="stats">Stats</button>
       <button class="tab" data-tab="export">Export/Import</button>
     </nav>
@@ -150,6 +151,26 @@
             <textarea id="other_details" name="other_details" rows="2" placeholder="Any additional notes..."></textarea>
           </div>
 
+          <!-- Row 6: Follow-Up -->
+          <div class="form-group">
+            <label for="follow_up_note">Follow-Up (optional)</label>
+            <textarea id="follow_up_note" name="follow_up_note" rows="2" placeholder="Imaging or clinical follow-up details..."></textarea>
+          </div>
+          <div class="form-row">
+            <div class="form-group">
+              <label for="follow_up_status">Follow-Up Status</label>
+              <select id="follow_up_status" name="follow_up_status">
+                <option value="none">None</option>
+                <option value="due">Due</option>
+                <option value="done">Done</option>
+              </select>
+            </div>
+            <div class="form-group">
+              <label for="follow_up_due_date">Follow-Up Due Date</label>
+              <input type="date" id="follow_up_due_date" name="follow_up_due_date">
+            </div>
+          </div>
+
           <input type="hidden" id="raw_text" name="raw_text">
           <input type="hidden" id="filename" name="filename">
           <input type="hidden" id="cpt_inferred_note" name="cpt_inferred_note">
@@ -221,6 +242,16 @@
             <option value="pending">Pending</option>
           </select>
         </div>
+        <div class="filter-group">
+          <label for="filterFollowUp">Follow-Up</label>
+          <select id="filterFollowUp">
+            <option value="">All</option>
+            <option value="none">None</option>
+            <option value="due">Due</option>
+            <option value="done">Done</option>
+            <option value="due_now">Due Now</option>
+          </select>
+        </div>
         <button id="clearFiltersBtn" class="btn secondary">Clear Filters</button>
       </div>
 
@@ -282,6 +313,16 @@
               <option value="pending">Pending</option>
             </select>
           </div>
+          <div class="filter-group">
+            <label for="tableFilterFollowUp">Follow-Up</label>
+            <select id="tableFilterFollowUp">
+              <option value="">All</option>
+              <option value="none">None</option>
+              <option value="due">Due</option>
+              <option value="done">Done</option>
+              <option value="due_now">Due Now</option>
+            </select>
+          </div>
           <button id="clearTableFilters" class="btn secondary">Clear Filters</button>
         </div>
         <div class="table-container">
@@ -296,6 +337,7 @@
                 <th class="sortable" data-sort="attending_surgeon">Attending <span class="sort-icon"></span></th>
                 <th class="sortable" data-sort="case_category">Category <span class="sort-icon"></span></th>
                 <th class="sortable" data-sort="image_count">Img <span class="sort-icon"></span></th>
+                <th class="sortable" data-sort="follow_up_status">FU <span class="sort-icon"></span></th>
                 <th class="sortable" data-sort="submitted_to_acgme">ACGME <span class="sort-icon"></span></th>
                 <th></th>
               </tr>
@@ -306,6 +348,27 @@
           </table>
         </div>
         <div id="tableSentinel" class="scroll-sentinel hidden">Loading more...</div>
+      </div>
+    </section>
+
+    <!-- Follow-Up Tab -->
+    <section id="followup" class="tab-content">
+      <div class="followup-view">
+        <h2>Follow-Up Queue</h2>
+        <p class="info">Cases marked as due appear here. Due dates sort to the top.</p>
+        <div class="filter-bar">
+          <div class="filter-group">
+            <label for="followupFilterStatus">Status</label>
+            <select id="followupFilterStatus">
+              <option value="due_now">Due Now</option>
+              <option value="due">Due</option>
+              <option value="all">All</option>
+            </select>
+          </div>
+        </div>
+        <div id="followupList">
+          <!-- Follow-up cases render here -->
+        </div>
       </div>
     </section>
 
