@@ -591,8 +591,12 @@ document.querySelectorAll('.tab').forEach(tab => {
     if (tab.dataset.tab === 'stats') {
       loadStats();
     }
+
+    updateFollowUpBadge();
   });
 });
+
+updateFollowUpBadge();
 
 // Table sorting state
 let tableSortField = 'date_of_surgery';
@@ -1567,6 +1571,16 @@ function populateForm(data, filename, imageCount = 1) {
 // --------------------------------------------
 const caseForm = document.getElementById('caseForm');
 const clearFormBtn = document.getElementById('clearForm');
+const duplicateWarning = document.getElementById('duplicateWarning');
+const duplicateWarningText = document.getElementById('duplicateWarningText');
+const duplicateOpenBtn = document.getElementById('duplicateOpenBtn');
+let duplicateCaseId = null;
+
+function resetDuplicateWarning() {
+  duplicateCaseId = null;
+  if (duplicateWarning) duplicateWarning.classList.add('hidden');
+  if (duplicateWarningText) duplicateWarningText.textContent = '';
+}
 
 // Save or update case
 caseForm.addEventListener('submit', async (e) => {
@@ -1642,6 +1656,7 @@ caseForm.addEventListener('submit', async (e) => {
     if (result.success) {
       alert(successMessage);
       resetUploadArea();
+      updateFollowUpBadge();
     } else {
       throw new Error(result.error);
     }
@@ -1658,6 +1673,7 @@ clearFormBtn.addEventListener('click', () => {
 });
 
 function resetUploadArea() {
+  resetDuplicateWarning();
   // Reset edit mode
   editingCaseId = null;
 
@@ -1680,6 +1696,60 @@ function resetUploadArea() {
   document.querySelector('#extractionResults .info').textContent = 'Review and edit the extracted information, then save:';
   document.querySelector('#caseForm button[type="submit"]').textContent = 'Save Case';
 }
+
+// Refresh follow-up badge count
+async function updateFollowUpBadge() {
+  const badge = document.getElementById('followupBadge');
+  if (!badge) return;
+  try {
+    const response = await fetch('/api/cases');
+    const cases = await response.json();
+    const dueCount = cases.filter(c => isFollowUpDue(c)).length;
+    if (dueCount > 0) {
+      badge.textContent = String(dueCount);
+      badge.classList.remove('hidden');
+    } else {
+      badge.classList.add('hidden');
+    }
+  } catch (error) {
+    badge.classList.add('hidden');
+  }
+}
+
+async function runDuplicateCheckInline() {
+  const mrn = document.getElementById('patient_mrn').value;
+  const date = document.getElementById('date_of_surgery').value;
+  if (!mrn || !date) {
+    resetDuplicateWarning();
+    return;
+  }
+
+  try {
+    const dupCheckUrl = `/api/cases/check-duplicate?mrn=${encodeURIComponent(mrn)}&date=${encodeURIComponent(date)}${editingCaseId ? `&excludeId=${editingCaseId}` : ''}`;
+    const dupResponse = await fetch(dupCheckUrl);
+    const dupResult = await dupResponse.json();
+    if (dupResult.duplicate && dupResult.existingCases && dupResult.existingCases.length > 0) {
+      const existing = dupResult.existingCases[0];
+      duplicateCaseId = existing.id;
+      if (duplicateWarningText) {
+        duplicateWarningText.textContent = `Possible duplicate: ${existing.procedure_name || 'Unknown procedure'} (${existing.attending_surgeon || 'Unknown'})`;
+      }
+      if (duplicateWarning) duplicateWarning.classList.remove('hidden');
+    } else {
+      resetDuplicateWarning();
+    }
+  } catch (error) {
+    resetDuplicateWarning();
+  }
+}
+
+document.getElementById('patient_mrn')?.addEventListener('blur', runDuplicateCheckInline);
+document.getElementById('date_of_surgery')?.addEventListener('blur', runDuplicateCheckInline);
+
+duplicateOpenBtn?.addEventListener('click', () => {
+  if (!duplicateCaseId) return;
+  editCase(duplicateCaseId);
+});
 
 // --------------------------------------------
 // Cases List
@@ -2114,6 +2184,7 @@ async function markFollowUpDone(caseId) {
     loadFollowUpQueue();
     loadCases(searchInput?.value || '');
     loadCasesTable();
+    updateFollowUpBadge();
   } catch (error) {
     alert('Error updating follow-up: ' + error.message);
   }

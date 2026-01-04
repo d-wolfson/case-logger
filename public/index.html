@@ -18,7 +18,9 @@
       <button class="tab active" data-tab="upload">Upload</button>
       <button class="tab" data-tab="cases">My Cases</button>
       <button class="tab" data-tab="table">Table</button>
-      <button class="tab" data-tab="followup">Follow-Up</button>
+      <button class="tab" data-tab="followup">
+        Follow-Up <span class="tab-badge hidden" id="followupBadge">0</span>
+      </button>
       <button class="tab" data-tab="stats">Stats</button>
       <button class="tab" data-tab="export">Export/Import</button>
     </nav>
@@ -174,6 +176,10 @@
           <input type="hidden" id="raw_text" name="raw_text">
           <input type="hidden" id="filename" name="filename">
           <input type="hidden" id="cpt_inferred_note" name="cpt_inferred_note">
+          <div id="duplicateWarning" class="inline-warning hidden">
+            <span id="duplicateWarningText"></span>
+            <button type="button" class="btn-link" id="duplicateOpenBtn">Open existing</button>
+          </div>
 
           <div class="button-group">
             <button type="submit" class="btn primary">Save Case</button>

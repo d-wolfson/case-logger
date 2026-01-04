@@ -426,6 +426,44 @@ header h1::before {
   color: var(--sage-600);
 }
 
+.tab-badge {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 18px;
+  height: 18px;
+  padding: 0 6px;
+  border-radius: 999px;
+  background: #fee2e2;
+  color: var(--danger);
+  font-size: 0.65rem;
+  font-weight: 700;
+  margin-left: 6px;
+}
+
+.inline-warning {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin: 12px 0 4px;
+  padding: 8px 10px;
+  border-radius: var(--radius);
+  background: #fff7ed;
+  border: 1px solid #fed7aa;
+  color: #92400e;
+  font-size: 0.85rem;
+}
+
+.btn-link {
+  background: none;
+  border: none;
+  color: #92400e;
+  font-weight: 600;
+  cursor: pointer;
+  padding: 0;
+  text-decoration: underline;
+}
+
 .scroll-sentinel {
   text-align: center;
   color: var(--sage-500);
@@ -1369,6 +1407,7 @@ header h1::before {
   display: inline-flex;
   align-items: center;
   gap: 0.2rem;
+  white-space: nowrap;
   font-size: 0.7rem;
   padding: 0.2rem 0.5rem;
   border-radius: 999px;
