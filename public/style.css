@@ -468,9 +468,66 @@ header h1::before {
   background: linear-gradient(135deg, var(--green-50) 0%, var(--green-100) 100%);
   border-radius: var(--radius-lg);
   padding: 30px;
-  max-width: 400px;
-  margin: 0 auto;
+  max-width: 500px;
+  margin: 0 auto 1.5rem;
   border: 1px solid var(--green-200);
+}
+
+/* Import Preview */
+.import-preview {
+  background: var(--sage-50);
+  border-radius: var(--radius-lg);
+  padding: 1.5rem;
+  margin-top: 1.5rem;
+  border: 1px solid var(--sage-200);
+}
+
+.import-preview h3 {
+  color: var(--green-800);
+  margin-bottom: 0.5rem;
+}
+
+.import-preview #importSummary {
+  color: var(--sage-600);
+  margin-bottom: 1rem;
+}
+
+.import-table-container {
+  max-height: 300px;
+  overflow-y: auto;
+  margin-bottom: 1rem;
+  border: 1px solid var(--sage-200);
+  border-radius: var(--radius);
+}
+
+.import-table-container table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 0.75rem;
+}
+
+.import-table-container th,
+.import-table-container td {
+  padding: 0.5rem;
+  text-align: left;
+  border-bottom: 1px solid var(--sage-200);
+}
+
+.import-table-container th {
+  background: var(--sage-100);
+  font-weight: 600;
+  position: sticky;
+  top: 0;
+}
+
+.import-table-container tr:hover {
+  background: var(--green-50);
+}
+
+.import-actions {
+  display: flex;
+  gap: 1rem;
+  justify-content: center;
 }
 
 .export-card h3 {
@@ -827,6 +884,44 @@ header h1::before {
   top: 0;
 }
 
+#casesTable th.sortable {
+  cursor: pointer;
+  user-select: none;
+}
+
+#casesTable th.sortable:hover {
+  background: var(--sage-200);
+}
+
+#casesTable th.sortable.sorted {
+  background: var(--sage-200);
+}
+
+#casesTable th .sort-icon {
+  margin-left: 0.25rem;
+  font-size: 0.7rem;
+  color: var(--sage-500);
+}
+
+/* Monthly Trends Line Graph */
+.trends-chart {
+  width: 100%;
+  height: auto;
+  display: block;
+  margin-top: 0.5rem;
+}
+
+.trends-summary {
+  display: flex;
+  justify-content: space-between;
+  padding: 0.75rem 0;
+  font-size: 0.85rem;
+  font-weight: 500;
+  color: var(--sage-700);
+  border-top: 1px solid var(--sage-200);
+  margin-top: 0.75rem;
+}
+
 #casesTable tbody tr:hover {
   background: var(--sage-50);
 }
@@ -846,6 +941,50 @@ header h1::before {
   background: var(--green-100);
   border-color: var(--green-400);
   color: var(--green-800);
+}
+
+/* Table header with actions */
+.table-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 1rem;
+}
+
+.table-header h2 {
+  margin: 0;
+}
+
+.table-actions {
+  display: flex;
+  align-items: center;
+  gap: 1rem;
+}
+
+.table-actions span {
+  color: var(--sage-600);
+  font-size: 0.85rem;
+}
+
+.btn-danger {
+  background: #dc2626;
+  color: white;
+  border: none;
+  padding: 0.5rem 1rem;
+  border-radius: var(--radius);
+  cursor: pointer;
+  font-size: 0.85rem;
+  transition: background 0.2s;
+}
+
+.btn-danger:hover {
+  background: #b91c1c;
+}
+
+.table-select-checkbox {
+  cursor: pointer;
+  width: 16px;
+  height: 16px;
 }
 
 #casesTable .procedure-cell,
@@ -1076,13 +1215,27 @@ header h1::before {
   padding: 0.1rem 0.3rem;
   border-radius: 4px;
   font-size: 0.75rem;
-  background: var(--green-100);
-  color: var(--green-800);
   transition: background 0.2s;
 }
 
-.img-badge:hover {
+.img-badge.has-images {
+  background: var(--green-100);
+  color: var(--green-800);
+}
+
+.img-badge.has-images:hover {
   background: var(--green-200);
+}
+
+.img-badge.no-images {
+  background: var(--sage-100);
+  color: var(--sage-500);
+  border: 1px dashed var(--sage-300);
+}
+
+.img-badge.no-images:hover {
+  background: var(--sage-200);
+  color: var(--sage-700);
 }
 
 /* Modal Styles */

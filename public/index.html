@@ -19,7 +19,7 @@
       <button class="tab" data-tab="cases">My Cases</button>
       <button class="tab" data-tab="table">Table</button>
       <button class="tab" data-tab="stats">Stats</button>
-      <button class="tab" data-tab="export">Export</button>
+      <button class="tab" data-tab="export">Export/Import</button>
     </nav>
 
     <!-- Upload Tab -->
@@ -214,19 +214,26 @@
     <!-- Table Tab -->
     <section id="table" class="tab-content">
       <div class="table-view">
-        <h2>Case Summary</h2>
+        <div class="table-header">
+          <h2>Case Summary</h2>
+          <div class="table-actions hidden" id="tableActions">
+            <span id="tableSelectionCount">0 selected</span>
+            <button class="btn btn-danger" onclick="deleteSelectedCases()">Delete Selected</button>
+          </div>
+        </div>
         <div class="table-container">
           <table id="casesTable">
             <thead>
               <tr>
-                <th>Date</th>
-                <th>MRN</th>
-                <th>Procedure</th>
-                <th>CPT</th>
-                <th>Attending</th>
-                <th>Category</th>
-                <th>Img</th>
-                <th>ACGME</th>
+                <th style="width: 40px;"><input type="checkbox" id="selectAllTable" onchange="toggleSelectAllTable()"></th>
+                <th class="sortable" data-sort="date_of_surgery">Date <span class="sort-icon"></span></th>
+                <th class="sortable" data-sort="patient_mrn">MRN <span class="sort-icon"></span></th>
+                <th class="sortable" data-sort="procedure_name">Procedure <span class="sort-icon"></span></th>
+                <th class="sortable" data-sort="cpt_code">CPT <span class="sort-icon"></span></th>
+                <th class="sortable" data-sort="attending_surgeon">Attending <span class="sort-icon"></span></th>
+                <th class="sortable" data-sort="case_category">Category <span class="sort-icon"></span></th>
+                <th class="sortable" data-sort="image_count">Img <span class="sort-icon"></span></th>
+                <th class="sortable" data-sort="submitted_to_acgme">ACGME <span class="sort-icon"></span></th>
                 <th></th>
               </tr>
             </thead>
@@ -283,10 +290,10 @@
             <div id="statsByCpt" class="stats-breakdown"></div>
           </div>
 
-          <!-- By Anesthesia -->
+          <!-- Monthly Trends -->
           <div class="stats-section">
-            <h3>By Anesthesia Staff</h3>
-            <div id="statsByAnesthesia" class="stats-breakdown"></div>
+            <h3>Monthly Trends</h3>
+            <div id="statsByMonth" class="stats-breakdown"></div>
           </div>
         </div>
       </div>
@@ -295,13 +302,29 @@
     <!-- Export Tab -->
     <section id="export" class="tab-content">
       <div class="export-options">
-        <h2>Export Your Case Log</h2>
-        <p>Download your cases in a format compatible with ACGME case log requirements.</p>
+        <h2>Export & Import</h2>
 
         <div class="export-card">
           <h3>CSV Export</h3>
           <p>Download all cases as a CSV file that can be opened in Excel or uploaded to your case log system.</p>
           <button id="exportCsv" class="btn primary">Download CSV</button>
+        </div>
+
+        <div class="export-card">
+          <h3>Import from ACGME</h3>
+          <p>Import cases from an ACGME case log export (CSV). Cases will be marked as already submitted.</p>
+          <input type="file" id="importFile" accept=".csv" hidden>
+          <button id="importBtn" class="btn secondary">Select CSV File</button>
+        </div>
+
+        <div id="importPreview" class="import-preview hidden">
+          <h3>Import Preview</h3>
+          <p id="importSummary"></p>
+          <div id="importTable" class="import-table-container"></div>
+          <div class="import-actions">
+            <button id="confirmImport" class="btn primary">Import All</button>
+            <button id="cancelImport" class="btn secondary">Cancel</button>
+          </div>
         </div>
 
         <div id="exportStatus"></div>

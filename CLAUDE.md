@@ -10,19 +10,22 @@ AI-powered surgical case logging application for neurosurgery residents. Built f
 - **Frontend**: Vanilla HTML/CSS/JavaScript
 - **Image Processing**: Client-side resize before upload (1600px max, 85% JPEG quality)
 
-## Key Features (v1.0)
+## Key Features (v1.1)
 - Upload single or multiple images per case (Epic screenshots, OR board photos, case cards)
 - AI extracts and consolidates data from multiple images
 - Auto-infers CPT codes from procedure descriptions using neurosurgery CPT reference
 - Auto-infers ACGME case categories (Cranial, Spinal, Peripheral Nerve, Pediatric)
 - Batch upload: process many images at once, AI auto-groups by MRN + date
 - Manual case entry option (no image required)
-- Edit existing case entries
+- Edit existing case entries (from My Cases or Table view)
 - Searchable case database with batch selection
-- Table view with hover tooltips for CPT descriptions
-- Stats/Analytics dashboard (by category, attending, CPT with avg duration, anesthesia)
+- Table view with sortable columns and hover tooltips for CPT descriptions
+- Stats/Analytics dashboard (by category, attending, CPT with avg duration, monthly trends line graph)
 - ACGME submission queue with browser automation
+- ACGME CSV import (import historical cases from ACGME export)
 - CSV export for ACGME compliance
+- Duplicate detection (warns on MRN + date match)
+- Image attachments for cases (pre/post-op imaging)
 
 ## Database Schema
 ```sql
@@ -50,7 +53,7 @@ case-logger/
 ├── acgme-queue.json    # Persisted queue for ACGME submission
 ├── uploads/            # Case image attachments (uploads/{case_id}/)
 ├── public/
-│   ├── index.html      # Main UI (5 tabs: Upload, My Cases, Table, Stats, Export)
+│   ├── index.html      # Main UI (5 tabs: Upload, My Cases, Table, Stats, Export/Import)
 │   ├── style.css       # Green/sage theme styling
 │   └── app.js          # Frontend logic, image resize, form handling, stats
 └── .claude/
@@ -62,7 +65,9 @@ case-logger/
 - `POST /api/upload` - Upload images, returns AI-extracted data
 - `POST /api/cases` - Save a case to database
 - `GET /api/cases` - Get all cases (includes image_count)
+- `GET /api/cases/:id` - Get single case by ID
 - `GET /api/cases/search?q=` - Search cases (includes image_count)
+- `GET /api/cases/check-duplicate?mrn=&date=&excludeId=` - Check for duplicate cases
 - `GET /api/cases/pending-acgme` - Get cases not yet submitted to ACGME
 - `PUT /api/cases/:id` - Update a case
 - `DELETE /api/cases/:id` - Delete a case
@@ -72,6 +77,7 @@ case-logger/
 - `GET /api/cases/:id/images` - Get list of images for a case
 - `GET /api/images/:imageId` - Serve an image file
 - `DELETE /api/images/:imageId` - Delete an image attachment
+- `POST /api/import` - Bulk import cases from ACGME CSV
 - `POST /api/acgme-queue` - Add case IDs to submission queue
 - `GET /api/acgme-queue` - Get queued cases
 - `DELETE /api/acgme-queue` - Clear the queue
@@ -87,7 +93,7 @@ node server.js
 ## Environment Variables
 - `GEMINI_API_KEY` - Google AI API key (stored in .env)
 
-## Neurosurgery Attendings
+## Neurosurgery Attendings (Last Name Only)
 Munich, Fontes, Sani, Mallela, Wang, Dewald, Deutsch, O'Toole, Munoz, Chen, Crowley, Traynelis, Jimenez, Zelby, Luken, Boco, Towner, Sierens
 
 *Note: Towner and Sierens cases use Site = "Other" in ACGME (not Rush)*
@@ -101,6 +107,11 @@ The app includes a comprehensive neurosurgery CPT code reference for AI inferenc
 - Shunts/CSF (62xxx)
 - Stereotactic procedures (61796-61800)
 
+## Data Format Standards
+- **Dates**: YYYY-MM-DD format (standardized across AI extraction and imports)
+- **Attending Names**: Last name only (e.g., "Munich" not "Stephan Munich")
+- **Categories**: Single category per case (vascular total suffix stripped on import)
+
 ## Future Features (Prioritized)
 
 ### Completed
@@ -109,22 +120,28 @@ The app includes a comprehensive neurosurgery CPT code reference for AI inferenc
 - [x] Case categories (ACGME-aligned taxonomy, AI infers + user confirms)
 - [x] Manual case entry (no image required)
 - [x] Neurosurgery attending filter (ignores co-attendings from other services)
-- [x] Case statistics dashboard (totals, breakdowns by category/attending/CPT/anesthesia)
+- [x] Case statistics dashboard (totals, breakdowns by category/attending/CPT)
 - [x] Table view with hover tooltips
 - [x] ACGME submission queue with browser automation
 - [x] Microdissection auto-check for tumor cases
 - [x] Attach pre/post-op imaging to cases (full quality storage in uploads/)
+- [x] Duplicate detection on upload (MRN + date match warning)
+- [x] ACGME CSV import (import historical cases)
+- [x] Monthly trends line graph in stats
+- [x] Table sorting (click column headers)
+- [x] Edit from table view (edit button)
 
-### High Priority
-- [ ] Duplicate detection on upload
-
-### Nice to Have
+### Pending
+- [ ] Attach images directly from table view
 - [ ] Date range filtering in stats
-- [ ] Edit from table view (click row to edit)
+- [ ] Quick filters on case list (attending, category, status)
+- [ ] Mobile-friendly responsive design
 
 ### Not Needed
 - ~~Role tracking~~ (not relevant for workflow)
 - ~~Cloud backup/sync~~ (local is fine)
+- ~~ACGME requirements tracker~~ (user declined)
+- ~~Bulk edit~~ (low priority)
 
 ## Case Category Taxonomy (ACGME-Aligned)
 
@@ -148,7 +165,7 @@ The app includes a comprehensive neurosurgery CPT code reference for AI inferenc
 - Spinal: Stimulation/Lesion/Pump/Other
 
 ### Peripheral Nerve
-- Peripheral Nerve (single category, or add subcategories if needed)
+- Peripheral Nerve
 
 ### Pediatric
 - Pediatric: Cranial Tumor

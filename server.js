@@ -33,7 +33,7 @@ const PORT = 3000;  // Your app will run at http://localhost:3000
 
 // Serve static files (HTML, CSS, JS) from the "public" folder
 app.use(express.static('public'));
-app.use(express.json());  // Allow JSON data in requests
+app.use(express.json({ limit: '10mb' }));  // Allow JSON data in requests (increased for ACGME imports)
 
 // --------------------------------------------
 // STEP 4: Set up file upload handling
@@ -407,7 +407,7 @@ ${CASE_CATEGORIES_TEXT}
 
 CRITICAL INSTRUCTIONS:
 - Return an ARRAY of case objects (even if only one case)
-- ATTENDING SURGEON: Must be from the neurosurgery attendings list. Ignore co-attendings from other specialties.
+- ATTENDING SURGEON: Use LAST NAME ONLY from the neurosurgery attendings list (e.g., "Munich" not "Stephan Munich"). Ignore co-attendings from other specialties.
 - PROCEDURE NAME: Extract the COMPLETE procedure description as written. This will be used to match CPT codes.
 - CASE CATEGORY: Return EXACTLY one category from the ACGME list.
 - Do NOT extract patient names - only MRN
@@ -416,11 +416,11 @@ CRITICAL INSTRUCTIONS:
 Respond in this EXACT JSON format (no markdown, no code blocks, just pure JSON array):
 [
   {
-    "date_of_surgery": "MM/DD/YYYY or Not found",
+    "date_of_surgery": "YYYY-MM-DD or Not found",
     "patient_mrn": "extracted or Not found",
     "patient_age": "number only or Not found",
     "patient_gender": "Male, Female, or Not found",
-    "attending_surgeon": "extracted or Not found",
+    "attending_surgeon": "last name only or Not found",
     "procedure_name": "extracted or Not found",
     "case_category": "exact category from ACGME list",
     "laterality": "Right, Left, Bilateral, or N/A",
@@ -445,8 +445,17 @@ Respond in this EXACT JSON format (no markdown, no code blocks, just pure JSON a
 
   // Parse JSON from response (handle potential markdown formatting)
   let jsonStr = text;
+
+  // Remove markdown code blocks
   if (text.includes('```')) {
     jsonStr = text.replace(/```json\n?/g, '').replace(/```\n?/g, '');
+  }
+
+  // Extract just the JSON array - find the outermost [ ... ]
+  const startIdx = jsonStr.indexOf('[');
+  const endIdx = jsonStr.lastIndexOf(']');
+  if (startIdx !== -1 && endIdx !== -1 && endIdx > startIdx) {
+    jsonStr = jsonStr.substring(startIdx, endIdx + 1);
   }
 
   const parsed = JSON.parse(jsonStr.trim());
@@ -507,18 +516,18 @@ ${CASE_CATEGORIES_TEXT}
 
 CRITICAL INSTRUCTIONS:
 - Return an ARRAY of case objects (even if only one case)
-- ATTENDING SURGEON: Must be from the neurosurgery attendings list
+- ATTENDING SURGEON: Use LAST NAME ONLY from the neurosurgery attendings list (e.g., "Munich" not "Stephan Munich"). Ignore co-attendings from other specialties.
 - CASE CATEGORY: Return EXACTLY one category from the ACGME list
 - Do NOT extract patient names - only MRN
 
 Respond in this EXACT JSON format (no markdown, no code blocks, just pure JSON array):
 [
   {
-    "date_of_surgery": "MM/DD/YYYY or Not found",
+    "date_of_surgery": "YYYY-MM-DD or Not found",
     "patient_mrn": "extracted or Not found",
     "patient_age": "number only or Not found",
     "patient_gender": "Male, Female, or Not found",
-    "attending_surgeon": "extracted or Not found",
+    "attending_surgeon": "last name only or Not found",
     "procedure_name": "extracted or Not found",
     "case_category": "exact category from ACGME list",
     "laterality": "Right, Left, Bilateral, or N/A",
@@ -542,8 +551,17 @@ Respond in this EXACT JSON format (no markdown, no code blocks, just pure JSON a
   const text = response.text();
 
   let jsonStr = text;
+
+  // Remove markdown code blocks
   if (text.includes('```')) {
     jsonStr = text.replace(/```json\n?/g, '').replace(/```\n?/g, '');
+  }
+
+  // Extract just the JSON array - find the outermost [ ... ]
+  const startIdx = jsonStr.indexOf('[');
+  const endIdx = jsonStr.lastIndexOf(']');
+  if (startIdx !== -1 && endIdx !== -1 && endIdx > startIdx) {
+    jsonStr = jsonStr.substring(startIdx, endIdx + 1);
   }
 
   const parsed = JSON.parse(jsonStr.trim());
@@ -745,6 +763,46 @@ app.post('/api/upload', upload.array('images', 10), async (req, res) => {
   } catch (error) {
     console.error('❌ Error processing images:', error);
     res.status(500).json({ error: 'Failed to process images: ' + error.message });
+  }
+});
+
+// Route: Check for duplicate cases (same MRN + date)
+app.get('/api/cases/check-duplicate', (req, res) => {
+  try {
+    const { mrn, date, excludeId } = req.query;
+
+    if (!mrn || !date) {
+      return res.json({ duplicate: false });
+    }
+
+    // Build query - exclude current case if editing
+    let query = `SELECT id, procedure_name, attending_surgeon, cpt_code FROM cases WHERE patient_mrn = ? AND date_of_surgery = ?`;
+    const params = [mrn, date];
+
+    if (excludeId) {
+      query += ` AND id != ?`;
+      params.push(excludeId);
+    }
+
+    const result = db.exec(query, params);
+
+    if (result.length === 0 || result[0].values.length === 0) {
+      return res.json({ duplicate: false });
+    }
+
+    // Found duplicate(s)
+    const duplicates = result[0].values.map(row => ({
+      id: row[0],
+      procedure_name: row[1],
+      attending_surgeon: row[2],
+      cpt_code: row[3]
+    }));
+
+    res.json({ duplicate: true, existingCases: duplicates });
+
+  } catch (error) {
+    console.error('❌ Error checking duplicates:', error);
+    res.json({ duplicate: false }); // Fail open - don't block saves
   }
 });
 
@@ -1010,6 +1068,85 @@ app.get('/api/export/csv', (req, res) => {
   } catch (error) {
     console.error('❌ Error exporting:', error);
     res.status(500).json({ error: 'Failed to export cases' });
+  }
+});
+
+// Route: Bulk import cases (from ACGME CSV)
+app.post('/api/import', (req, res) => {
+  try {
+    const cases = req.body.cases;
+
+    if (!cases || !Array.isArray(cases) || cases.length === 0) {
+      return res.status(400).json({ error: 'No cases provided' });
+    }
+
+    let imported = 0;
+    let skipped = 0;
+    let duplicates = 0;
+
+    // Prepare statement for checking duplicates
+    const checkStmt = db.prepare(`SELECT COUNT(*) as count FROM cases WHERE patient_mrn = ? AND date_of_surgery = ?`);
+
+    const insertStmt = db.prepare(`
+      INSERT INTO cases (
+        date_of_surgery, patient_mrn, patient_age, patient_gender,
+        attending_surgeon, procedure_name, cpt_code, cpt_inferred_note,
+        case_category, laterality, case_duration, anesthesia_staff, other_details,
+        raw_extracted_text, image_filename, submitted_to_acgme
+      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+    `);
+
+    for (const c of cases) {
+      try {
+        // Check for duplicate (same MRN + date)
+        if (c.patient_mrn && c.date_of_surgery) {
+          checkStmt.bind([c.patient_mrn, c.date_of_surgery]);
+          if (checkStmt.step()) {
+            const count = checkStmt.get()[0];
+            checkStmt.reset();
+            if (count > 0) {
+              duplicates++;
+              continue; // Skip this duplicate
+            }
+          }
+          checkStmt.reset();
+        }
+
+        insertStmt.run([
+          c.date_of_surgery || '',
+          c.patient_mrn || '',
+          c.patient_age || '',
+          c.patient_gender || '',
+          c.attending_surgeon || '',
+          c.procedure_name || '',
+          c.cpt_code || '',
+          c.cpt_inferred_note || '',
+          c.case_category || '',
+          c.laterality || 'N/A',
+          c.case_duration || '',
+          c.anesthesia_staff || '',
+          c.other_details || '',
+          c.raw_extracted_text || 'Imported from ACGME',
+          c.image_filename || '',
+          1  // Always mark as submitted since this is an ACGME import
+        ]);
+        imported++;
+      } catch (e) {
+        console.error('Error importing case:', e);
+        skipped++;
+      }
+    }
+
+    checkStmt.free();
+    insertStmt.free();
+    saveDatabase();
+
+    console.log(`📥 Imported ${imported} cases (${duplicates} duplicates, ${skipped} errors)`);
+    res.json({ success: true, imported, skipped, duplicates });
+
+  } catch (error) {
+    console.error('❌ Error importing:', error);
+    res.status(500).json({ error: 'Failed to import cases: ' + error.message });
   }
 });
 

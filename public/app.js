@@ -546,7 +546,7 @@ function startLoadingMessages(textElement) {
   loadingInterval = setInterval(() => {
     currentMessageIndex = (currentMessageIndex + 1) % LOADING_MESSAGES.length;
     textElement.textContent = LOADING_MESSAGES[currentMessageIndex];
-  }, 4000); // Change message every 4 seconds
+  }, 8000); // Change message every 8 seconds
 }
 
 function stopLoadingMessages() {
@@ -590,24 +590,38 @@ document.querySelectorAll('.tab').forEach(tab => {
   });
 });
 
+// Table sorting state
+let tableSortField = 'date_of_surgery';
+let tableSortAsc = false; // Default to descending (newest first)
+
 // Load cases into the table view
 async function loadCasesTable() {
   try {
     const response = await fetch('/api/cases');
-    const cases = await response.json();
+    let cases = await response.json();
+
+    // Sort cases
+    cases = sortCases(cases, tableSortField, tableSortAsc);
+
+    // Update sort icons
+    updateSortIcons();
 
     const tbody = document.getElementById('casesTableBody');
     if (cases.length === 0) {
-      tbody.innerHTML = '<tr><td colspan="9" style="text-align: center; color: #666;">No cases yet. Upload some images to get started.</td></tr>';
+      tbody.innerHTML = '<tr><td colspan="10" style="text-align: center; color: #666;">No cases yet. Upload some images to get started.</td></tr>';
       return;
     }
 
     tbody.innerHTML = cases.map(c => {
-      const cptDesc = c.cpt_code ? (CPT_DESCRIPTIONS[c.cpt_code] || '') : '';
+      // Use cpt_inferred_note first (from DB), fall back to CPT reference
+      const cptDesc = c.cpt_inferred_note || (c.cpt_code ? CPT_DESCRIPTIONS[c.cpt_code] : '') || '';
       const cptDisplay = cptDesc ? `${truncate(cptDesc, 30)} (${c.cpt_code})` : (c.cpt_code || '-');
       const cptTitle = cptDesc ? `${cptDesc} (${c.cpt_code})` : '';
       return `
       <tr data-id="${c.id}">
+        <td style="text-align: center;">
+          <input type="checkbox" class="table-select-checkbox" data-id="${c.id}" onchange="updateTableSelection()">
+        </td>
         <td>${c.date_of_surgery || '-'}</td>
         <td>${c.patient_mrn || '-'}</td>
         <td class="truncate-cell" title="${escapeHtml(c.procedure_name) || ''}">${truncate(c.procedure_name, 35) || '-'}</td>
@@ -615,9 +629,13 @@ async function loadCasesTable() {
         <td class="truncate-cell" title="${escapeHtml(c.attending_surgeon) || ''}">${truncate(c.attending_surgeon, 20) || '-'}</td>
         <td class="truncate-cell" title="${escapeHtml(c.case_category) || ''}">${truncate(c.case_category, 20) || '-'}</td>
         <td style="text-align: center;">
-          ${c.image_count > 0 ? `<span class="img-badge" onclick="openAttachmentModal(${c.id})" title="View attachments">📎${c.image_count}</span>` : '-'}
+          <span class="img-badge ${c.image_count > 0 ? 'has-images' : 'no-images'}"
+                onclick="openAttachmentModal(${c.id})"
+                title="${c.image_count > 0 ? 'View/add attachments' : 'Add attachments'}">
+            ${c.image_count > 0 ? `📎${c.image_count}` : '+'}
+          </span>
         </td>
-        <td>
+        <td style="text-align: center;">
           <span class="acgme-badge ${c.submitted_to_acgme ? 'submitted' : 'pending'}"
                 onclick="toggleAcgmeStatus(${c.id}, ${c.submitted_to_acgme ? 'true' : 'false'}); loadCasesTable();"
                 title="Click to toggle">
@@ -632,6 +650,131 @@ async function loadCasesTable() {
   } catch (error) {
     console.error('Error loading table:', error);
   }
+}
+
+// Sort cases by field
+function sortCases(cases, field, ascending) {
+  return [...cases].sort((a, b) => {
+    let valA = a[field] || '';
+    let valB = b[field] || '';
+
+    // Handle boolean for ACGME status
+    if (field === 'submitted_to_acgme') {
+      valA = valA ? 1 : 0;
+      valB = valB ? 1 : 0;
+    }
+
+    // Handle numeric for image_count
+    if (field === 'image_count') {
+      valA = parseInt(valA) || 0;
+      valB = parseInt(valB) || 0;
+    }
+
+    // String comparison (case-insensitive)
+    if (typeof valA === 'string') valA = valA.toLowerCase();
+    if (typeof valB === 'string') valB = valB.toLowerCase();
+
+    if (valA < valB) return ascending ? -1 : 1;
+    if (valA > valB) return ascending ? 1 : -1;
+    return 0;
+  });
+}
+
+// Update sort icons in table headers
+function updateSortIcons() {
+  document.querySelectorAll('#casesTable th.sortable').forEach(th => {
+    const icon = th.querySelector('.sort-icon');
+    if (th.dataset.sort === tableSortField) {
+      icon.textContent = tableSortAsc ? '▲' : '▼';
+      th.classList.add('sorted');
+    } else {
+      icon.textContent = '';
+      th.classList.remove('sorted');
+    }
+  });
+}
+
+// Handle header click for sorting
+document.querySelectorAll('#casesTable th.sortable').forEach(th => {
+  th.addEventListener('click', () => {
+    const field = th.dataset.sort;
+    if (tableSortField === field) {
+      // Toggle direction
+      tableSortAsc = !tableSortAsc;
+    } else {
+      // New field, default to descending for dates, ascending for others
+      tableSortField = field;
+      tableSortAsc = field !== 'date_of_surgery';
+    }
+    loadCasesTable();
+  });
+});
+
+// Table selection functions
+function toggleSelectAllTable() {
+  const selectAll = document.getElementById('selectAllTable');
+  const checkboxes = document.querySelectorAll('.table-select-checkbox');
+  checkboxes.forEach(cb => cb.checked = selectAll.checked);
+  updateTableSelection();
+}
+
+function updateTableSelection() {
+  const checkboxes = document.querySelectorAll('.table-select-checkbox:checked');
+  const count = checkboxes.length;
+  const actionsDiv = document.getElementById('tableActions');
+  const countSpan = document.getElementById('tableSelectionCount');
+
+  if (count > 0) {
+    actionsDiv.classList.remove('hidden');
+    countSpan.textContent = `${count} selected`;
+  } else {
+    actionsDiv.classList.add('hidden');
+  }
+
+  // Update select all checkbox state
+  const allCheckboxes = document.querySelectorAll('.table-select-checkbox');
+  const selectAll = document.getElementById('selectAllTable');
+  if (selectAll) {
+    selectAll.checked = allCheckboxes.length > 0 && checkboxes.length === allCheckboxes.length;
+    selectAll.indeterminate = checkboxes.length > 0 && checkboxes.length < allCheckboxes.length;
+  }
+}
+
+async function deleteSelectedCases() {
+  const checkboxes = document.querySelectorAll('.table-select-checkbox:checked');
+  const ids = Array.from(checkboxes).map(cb => cb.dataset.id);
+
+  if (ids.length === 0) return;
+
+  const confirmMsg = `Delete ${ids.length} case${ids.length > 1 ? 's' : ''}?\n\nThis cannot be undone.`;
+  if (!confirm(confirmMsg)) return;
+
+  let deleted = 0;
+  let errors = 0;
+
+  for (const id of ids) {
+    try {
+      const response = await fetch(`/api/cases/${id}`, { method: 'DELETE' });
+      if (response.ok) {
+        deleted++;
+      } else {
+        errors++;
+      }
+    } catch (e) {
+      errors++;
+    }
+  }
+
+  if (errors > 0) {
+    alert(`Deleted ${deleted} case(s). ${errors} error(s) occurred.`);
+  }
+
+  // Refresh table
+  loadCasesTable();
+
+  // Reset select all
+  const selectAll = document.getElementById('selectAllTable');
+  if (selectAll) selectAll.checked = false;
 }
 
 // Load stats view
@@ -661,8 +804,8 @@ async function loadStats() {
     // By CPT Code with avg duration
     renderCptBreakdown('statsByCpt', cases);
 
-    // By Anesthesia
-    renderBreakdown('statsByAnesthesia', groupByAnesthesia(cases), total);
+    // Monthly Trends
+    renderMonthlyTrends('statsByMonth', cases);
 
   } catch (error) {
     console.error('Error loading stats:', error);
@@ -679,20 +822,121 @@ function groupBy(cases, field) {
   return Object.entries(groups).sort((a, b) => b[1] - a[1]);
 }
 
-// Group by anesthesia (format: "Last, First; Last, First")
-function groupByAnesthesia(cases) {
-  const groups = {};
+// Render monthly trends as a line graph
+function renderMonthlyTrends(containerId, cases) {
+  const container = document.getElementById(containerId);
+  if (!container) return;
+
+  // Group cases by month (YYYY-MM)
+  const monthlyData = {};
   cases.forEach(c => {
-    if (c.anesthesia_staff) {
-      // Split by semicolons (different providers)
-      const providers = c.anesthesia_staff.split(';').map(s => s.trim()).filter(s => s);
-      providers.forEach(fullName => {
-        // fullName is "Last, First" - use full name as key for accurate counting
-        groups[fullName] = (groups[fullName] || 0) + 1;
-      });
+    if (c.date_of_surgery) {
+      // Parse date - handle both YYYY-MM-DD and MM/DD/YYYY formats
+      let dateStr = c.date_of_surgery;
+      let month;
+      if (dateStr.includes('-')) {
+        // YYYY-MM-DD format
+        month = dateStr.substring(0, 7); // YYYY-MM
+      } else if (dateStr.includes('/')) {
+        // MM/DD/YYYY format
+        const parts = dateStr.split('/');
+        if (parts.length === 3) {
+          month = `${parts[2]}-${parts[0].padStart(2, '0')}`;
+        }
+      }
+      if (month) {
+        monthlyData[month] = (monthlyData[month] || 0) + 1;
+      }
     }
   });
-  return Object.entries(groups).sort((a, b) => b[1] - a[1]);
+
+  // Sort by month (entire residency)
+  const sortedMonths = Object.entries(monthlyData)
+    .sort((a, b) => a[0].localeCompare(b[0]));
+
+  if (sortedMonths.length === 0) {
+    container.innerHTML = '<p style="color: #666; text-align: center;">No data</p>';
+    return;
+  }
+
+  const maxCount = Math.max(...sortedMonths.map(m => m[1]));
+  const minCount = 0;
+
+  // Format month labels - show quarter labels (Q1'22, Q2'22, etc.)
+  const formatMonthShort = (yyyymm) => {
+    const [year, month] = yyyymm.split('-');
+    const monthNames = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
+    return `${monthNames[parseInt(month) - 1]} '${year.slice(2)}`;
+  };
+
+  // Build SVG line graph with proper dimensions
+  const width = 600;
+  const height = 200;
+  const padding = { top: 20, right: 20, bottom: 40, left: 45 };
+  const graphWidth = width - padding.left - padding.right;
+  const graphHeight = height - padding.top - padding.bottom;
+
+  const points = sortedMonths.map(([month, count], i) => {
+    const x = padding.left + (i / (sortedMonths.length - 1 || 1)) * graphWidth;
+    const y = padding.top + graphHeight - ((count - minCount) / (maxCount - minCount || 1)) * graphHeight;
+    return { x, y, month, count };
+  });
+
+  // Create smooth path for line (using curve)
+  const linePath = points.map((p, i) => `${i === 0 ? 'M' : 'L'} ${p.x} ${p.y}`).join(' ');
+
+  // Create area path (filled below line)
+  const areaPath = `${linePath} L ${points[points.length - 1].x} ${padding.top + graphHeight} L ${padding.left} ${padding.top + graphHeight} Z`;
+
+  // X-axis labels - show Jan of each year plus first/last
+  const yearStarts = points.filter((p, i) => {
+    const month = p.month.split('-')[1];
+    return month === '01' || i === 0 || i === points.length - 1;
+  });
+  // Limit to reasonable number of labels
+  const xLabels = yearStarts.length > 8
+    ? yearStarts.filter((_, i) => i % 2 === 0 || i === yearStarts.length - 1)
+    : yearStarts;
+
+  // Y-axis labels - nice round numbers
+  const yLabels = [0, Math.round(maxCount / 2), maxCount];
+
+  container.innerHTML = `
+    <svg viewBox="0 0 ${width} ${height}" class="trends-chart">
+      <!-- Grid lines -->
+      ${yLabels.map(val => {
+        const y = padding.top + graphHeight - ((val - minCount) / (maxCount - minCount || 1)) * graphHeight;
+        return `<line x1="${padding.left}" y1="${y}" x2="${width - padding.right}" y2="${y}" stroke="#e5e7eb" stroke-width="1"/>`;
+      }).join('')}
+
+      <!-- Area fill -->
+      <path d="${areaPath}" fill="var(--green-100)" opacity="0.6"/>
+
+      <!-- Line -->
+      <path d="${linePath}" fill="none" stroke="var(--green-600)" stroke-width="2.5" stroke-linejoin="round" stroke-linecap="round"/>
+
+      <!-- Data points (only show hover targets, smaller visible dots) -->
+      ${points.map(p => `
+        <circle cx="${p.x}" cy="${p.y}" r="4" fill="var(--green-600)" opacity="0">
+          <title>${formatMonthShort(p.month)}: ${p.count} cases</title>
+        </circle>
+        <circle cx="${p.x}" cy="${p.y}" r="2" fill="var(--green-600)" pointer-events="none"/>
+      `).join('')}
+
+      <!-- Y-axis labels -->
+      ${yLabels.map(val => {
+        const y = padding.top + graphHeight - ((val - minCount) / (maxCount - minCount || 1)) * graphHeight;
+        return `<text x="${padding.left - 8}" y="${y + 4}" text-anchor="end" font-size="12" fill="#6b7280" font-family="system-ui, sans-serif">${val}</text>`;
+      }).join('')}
+
+      <!-- X-axis labels -->
+      ${xLabels.map(p => `<text x="${p.x}" y="${height - 12}" text-anchor="middle" font-size="11" fill="#6b7280" font-family="system-ui, sans-serif">${formatMonthShort(p.month)}</text>`).join('')}
+    </svg>
+    <div class="trends-summary">
+      <span>Total: ${cases.length} cases</span>
+      <span>Avg: ${Math.round(cases.length / sortedMonths.length)}/mo</span>
+    </div>
+  `;
 }
 
 // Render a breakdown section
@@ -726,7 +970,12 @@ function renderCptBreakdown(containerId, cases) {
   cases.forEach(c => {
     if (c.cpt_code) {
       if (!cptData[c.cpt_code]) {
-        cptData[c.cpt_code] = { count: 0, durations: [], description: CPT_DESCRIPTIONS[c.cpt_code] || '' };
+        // Use cpt_inferred_note from case, fall back to our CPT reference
+        const desc = c.cpt_inferred_note || CPT_DESCRIPTIONS[c.cpt_code] || '';
+        cptData[c.cpt_code] = { count: 0, durations: [], description: desc };
+      } else if (!cptData[c.cpt_code].description && c.cpt_inferred_note) {
+        // If we don't have a description yet but this case has one, use it
+        cptData[c.cpt_code].description = c.cpt_inferred_note;
       }
       cptData[c.cpt_code].count++;
       if (c.case_duration) {
@@ -1104,6 +1353,28 @@ caseForm.addEventListener('submit', async (e) => {
   };
 
   try {
+    // Check for duplicates before saving
+    if (formData.patient_mrn && formData.date_of_surgery) {
+      const dupCheckUrl = `/api/cases/check-duplicate?mrn=${encodeURIComponent(formData.patient_mrn)}&date=${encodeURIComponent(formData.date_of_surgery)}${editingCaseId ? `&excludeId=${editingCaseId}` : ''}`;
+      const dupResponse = await fetch(dupCheckUrl);
+      const dupResult = await dupResponse.json();
+
+      if (dupResult.duplicate) {
+        const existing = dupResult.existingCases[0];
+        const proceed = confirm(
+          `⚠️ Potential duplicate detected!\n\n` +
+          `A case already exists for this patient (MRN: ${formData.patient_mrn}) on ${formData.date_of_surgery}:\n\n` +
+          `• ${existing.procedure_name || 'Unknown procedure'}\n` +
+          `• Attending: ${existing.attending_surgeon || 'Unknown'}\n` +
+          `• CPT: ${existing.cpt_code || 'None'}\n\n` +
+          `Save anyway?`
+        );
+        if (!proceed) {
+          return; // User cancelled
+        }
+      }
+    }
+
     let response;
     let successMessage;
 
@@ -1613,6 +1884,39 @@ document.getElementById('saveAllCasesBtn').addEventListener('click', async () =>
     casesToSave.push(caseData);
   }
 
+  // Check for duplicates before saving
+  const duplicates = [];
+  for (const caseData of casesToSave) {
+    if (caseData.patient_mrn && caseData.date_of_surgery) {
+      try {
+        const dupCheckUrl = `/api/cases/check-duplicate?mrn=${encodeURIComponent(caseData.patient_mrn)}&date=${encodeURIComponent(caseData.date_of_surgery)}`;
+        const dupResponse = await fetch(dupCheckUrl);
+        const dupResult = await dupResponse.json();
+        if (dupResult.duplicate) {
+          duplicates.push({
+            newCase: caseData,
+            existing: dupResult.existingCases[0]
+          });
+        }
+      } catch (e) {
+        // Ignore duplicate check errors
+      }
+    }
+  }
+
+  // Warn about duplicates
+  if (duplicates.length > 0) {
+    const dupList = duplicates.map(d =>
+      `• MRN ${d.newCase.patient_mrn} on ${d.newCase.date_of_surgery}`
+    ).join('\n');
+    const proceed = confirm(
+      `⚠️ ${duplicates.length} potential duplicate(s) detected:\n\n${dupList}\n\nSave all cases anyway?`
+    );
+    if (!proceed) {
+      return;
+    }
+  }
+
   // Save each case
   let savedCount = 0;
   let errorCount = 0;
@@ -1955,4 +2259,286 @@ document.getElementById('attachmentInput')?.addEventListener('change', async (e)
 
   // Clear input so same file can be selected again
   e.target.value = '';
+});
+
+// --------------------------------------------
+// ACGME CSV Import
+// --------------------------------------------
+let parsedImportCases = [];
+
+// Trigger file input
+document.getElementById('importBtn')?.addEventListener('click', () => {
+  document.getElementById('importFile').click();
+});
+
+// Handle file selection
+document.getElementById('importFile')?.addEventListener('change', (e) => {
+  const file = e.target.files[0];
+  if (!file) return;
+
+  const reader = new FileReader();
+  reader.onload = (event) => {
+    const csvText = event.target.result;
+    parseAcgmeCsv(csvText);
+  };
+  reader.readAsText(file);
+
+  // Clear input so same file can be selected again
+  e.target.value = '';
+});
+
+// Parse ACGME CSV format
+function parseAcgmeCsv(csvText) {
+  const lines = csvText.split('\n');
+  if (lines.length < 2) {
+    alert('CSV file appears to be empty or invalid.');
+    return;
+  }
+
+  // Parse header row
+  const headers = parseCsvLine(lines[0]);
+
+  // Find column indices
+  const colIndex = {
+    ProcedureDate: headers.indexOf('ProcedureDate'),
+    PatientSex: headers.indexOf('PatientSex'),
+    CaseID: headers.indexOf('CaseID'),
+    Code: headers.indexOf('Code'),
+    CPTDesc: headers.indexOf('CPTDesc'),
+    AttendingLName: headers.indexOf('AttendingLName'),
+    AttendingFName: headers.indexOf('AttendingFName'),
+    DefinedCategories: headers.indexOf('DefinedCategories'),
+    PatientType: headers.indexOf('PatientType')
+  };
+
+  // Parse data rows
+  parsedImportCases = [];
+  for (let i = 1; i < lines.length; i++) {
+    const line = lines[i].trim();
+    if (!line) continue;
+
+    const values = parseCsvLine(line);
+
+    // Build case object
+    const cptDesc = values[colIndex.CPTDesc] || '';
+    const caseData = {
+      date_of_surgery: formatAcgmeDate(values[colIndex.ProcedureDate] || ''),
+      patient_mrn: values[colIndex.CaseID] || '',
+      patient_gender: mapGender(values[colIndex.PatientSex] || ''),
+      cpt_code: values[colIndex.Code] || '',
+      procedure_name: cptDesc,
+      cpt_inferred_note: cptDesc,  // Store CPT description for stats display
+      attending_surgeon: formatAttending(
+        values[colIndex.AttendingFName] || '',
+        values[colIndex.AttendingLName] || ''
+      ),
+      case_category: mapAcgmeCategory(values[colIndex.DefinedCategories] || ''),
+      patient_type: values[colIndex.PatientType] || '',
+      submitted_to_acgme: true  // Mark as already submitted since it came from ACGME export
+    };
+
+    // Only include if we have at least some data
+    if (caseData.date_of_surgery || caseData.patient_mrn || caseData.cpt_code) {
+      parsedImportCases.push(caseData);
+    }
+  }
+
+  // Show preview
+  showImportPreview();
+}
+
+// Parse a single CSV line, handling quoted fields
+function parseCsvLine(line) {
+  const result = [];
+  let current = '';
+  let inQuotes = false;
+
+  for (let i = 0; i < line.length; i++) {
+    const char = line[i];
+
+    if (char === '"') {
+      if (inQuotes && line[i + 1] === '"') {
+        current += '"';
+        i++;
+      } else {
+        inQuotes = !inQuotes;
+      }
+    } else if (char === ',' && !inQuotes) {
+      result.push(current.trim());
+      current = '';
+    } else {
+      current += char;
+    }
+  }
+  result.push(current.trim());
+
+  return result;
+}
+
+// Format ACGME date (M/D/YYYY or MM/DD/YYYY) to YYYY-MM-DD
+function formatAcgmeDate(dateStr) {
+  if (!dateStr) return '';
+
+  const parts = dateStr.split('/');
+  if (parts.length !== 3) return dateStr;
+
+  const month = parts[0].padStart(2, '0');
+  const day = parts[1].padStart(2, '0');
+  const year = parts[2];
+
+  return `${year}-${month}-${day}`;
+}
+
+// Map M/F to Male/Female
+function mapGender(sex) {
+  if (sex === 'M') return 'Male';
+  if (sex === 'F') return 'Female';
+  return '';
+}
+
+// Format attending name (just last name for consistency)
+function formatAttending(firstName, lastName) {
+  return lastName || '';
+}
+
+// Map ACGME category names to our format
+function mapAcgmeCategory(acgmeCategory) {
+  // Strip out ", Cranial: Vascular Total" suffix that ACGME adds to vascular cases
+  let cleaned = acgmeCategory.replace(/, Cranial:\s*Vascular Total/gi, '').trim();
+
+  // ACGME uses similar naming, some need minor adjustment
+  const categoryMap = {
+    'Cranial:  Tumor General': 'Cranial: Tumor General',
+    'Cranial:  Tumor Sellar/Parasellar': 'Cranial: Tumor Sellar/Parasellar',
+    'Cranial:  Trauma/Other': 'Cranial: Trauma/Other',
+    'Cranial:  Vascular Open': 'Cranial: Vascular Open',
+    'Cranial:  Vascular Endovascular': 'Cranial: Vascular Endovascular',
+    'Cranial:  CSF Diversion/ETV/Other': 'Cranial: CSF Diversion/ETV/Other',
+    'Cranial/Extracranial:  Pain': 'Cranial/Extracranial: Pain',
+    'Cranial/Extracranial:  Functional Disorders': 'Cranial/Extracranial: Functional Disorders',
+    'Cranial/Extracranial:  Epilepsy': 'Cranial/Extracranial: Epilepsy',
+    'Spinal:  Anterior Cervical': 'Spinal: Anterior Cervical',
+    'Spinal:  Posterior Cervical': 'Spinal: Posterior Cervical',
+    'Spinal:  Thoracic/Lumbar/Sacral Instrumentation Fusion': 'Spinal: Thoracic/Lumbar/Sacral Instrumentation Fusion',
+    'Spinal:  Lumbar Laminectomy/Laminotomy': 'Spinal: Lumbar Laminectomy/Laminotomy',
+    'Spinal:  Stimulation/Lesion/Pump/Other': 'Spinal: Stimulation/Lesion/Pump/Other',
+    'Peripheral Nerve': 'Peripheral Nerve',
+    'Pediatric:  Cranial Tumor': 'Pediatric: Cranial Tumor',
+    'Pediatric:  Cranial Trauma/Other': 'Pediatric: Cranial Trauma/Other',
+    'Pediatric:  CSF Diversion/ETV/Other': 'Pediatric: CSF Diversion/ETV/Other',
+    'Pediatric:  Spine': 'Pediatric: Spine'
+  };
+
+  // Try direct map first
+  if (categoryMap[cleaned]) {
+    return categoryMap[cleaned];
+  }
+
+  // Try normalizing (remove extra spaces)
+  const normalized = cleaned.replace(/:\s+/g, ': ').trim();
+  if (categoryMap[normalized]) {
+    return categoryMap[normalized];
+  }
+
+  // Return cleaned version if no mapping found
+  return normalized || cleaned;
+}
+
+// Show import preview table
+function showImportPreview() {
+  const preview = document.getElementById('importPreview');
+  const summary = document.getElementById('importSummary');
+  const tableContainer = document.getElementById('importTable');
+
+  if (parsedImportCases.length === 0) {
+    alert('No valid cases found in the CSV file.');
+    return;
+  }
+
+  summary.textContent = `Found ${parsedImportCases.length} cases to import. These will be marked as already submitted to ACGME.`;
+
+  // Build preview table
+  const tableHtml = `
+    <table class="import-table">
+      <thead>
+        <tr>
+          <th>Date</th>
+          <th>MRN</th>
+          <th>CPT</th>
+          <th>Procedure</th>
+          <th>Attending</th>
+          <th>Category</th>
+        </tr>
+      </thead>
+      <tbody>
+        ${parsedImportCases.slice(0, 50).map(c => `
+          <tr>
+            <td>${c.date_of_surgery || '-'}</td>
+            <td>${c.patient_mrn || '-'}</td>
+            <td>${c.cpt_code || '-'}</td>
+            <td title="${c.procedure_name || ''}">${truncate(c.procedure_name, 40)}</td>
+            <td>${c.attending_surgeon || '-'}</td>
+            <td title="${c.case_category || ''}">${truncate(c.case_category, 25)}</td>
+          </tr>
+        `).join('')}
+        ${parsedImportCases.length > 50 ? `
+          <tr><td colspan="6" style="text-align: center; font-style: italic;">
+            ... and ${parsedImportCases.length - 50} more cases
+          </td></tr>
+        ` : ''}
+      </tbody>
+    </table>
+  `;
+
+  tableContainer.innerHTML = tableHtml;
+  preview.classList.remove('hidden');
+}
+
+// Confirm import
+document.getElementById('confirmImport')?.addEventListener('click', async () => {
+  if (parsedImportCases.length === 0) {
+    alert('No cases to import.');
+    return;
+  }
+
+  const confirmMsg = `Import ${parsedImportCases.length} cases?\n\nThese will be marked as already submitted to ACGME.`;
+  if (!confirm(confirmMsg)) {
+    return;
+  }
+
+  try {
+    const response = await fetch('/api/import', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ cases: parsedImportCases })
+    });
+
+    const result = await response.json();
+
+    if (result.success) {
+      const dupMsg = result.duplicates > 0 ? `\nDuplicates skipped: ${result.duplicates} (same MRN + date)` : '';
+      const errMsg = result.skipped > 0 ? `\nErrors: ${result.skipped}` : '';
+      alert(`✓ Import complete!\n\nImported: ${result.imported} cases${dupMsg}${errMsg}`);
+
+      // Hide preview and reset
+      document.getElementById('importPreview').classList.add('hidden');
+      parsedImportCases = [];
+
+      // Refresh stats if on stats tab
+      if (document.getElementById('stats').classList.contains('active')) {
+        loadStats();
+      }
+    } else {
+      throw new Error(result.error);
+    }
+  } catch (error) {
+    console.error('Import error:', error);
+    alert('Error importing cases: ' + error.message);
+  }
+});
+
+// Cancel import
+document.getElementById('cancelImport')?.addEventListener('click', () => {
+  document.getElementById('importPreview').classList.add('hidden');
+  parsedImportCases = [];
 });

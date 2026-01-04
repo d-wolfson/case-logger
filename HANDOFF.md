@@ -1,10 +1,30 @@
 # Case Logger - Handoff Notes
 
-*Last updated: January 3, 2026*
+*Last updated: January 4, 2026*
 
 **GitHub**: https://github.com/d-wolfson/case-logger (private)
 
-## What We Completed Today
+## What We Completed Today (Jan 4)
+
+### New Features
+1. **Duplicate Detection** - Warns when saving a case with same MRN + date as existing case
+2. **ACGME CSV Import** - Import historical cases from ACGME case log export (Export/Import tab)
+3. **Monthly Trends Line Graph** - SVG line chart showing case volume over entire residency
+4. **Table Sorting** - Click column headers to sort (Date, MRN, Procedure, CPT, Attending, Category, ACGME)
+5. **Edit from Table View** - Edit button in table rows
+
+### Improvements
+- **Standardized Date Format** - All dates now YYYY-MM-DD (Gemini extraction + imports)
+- **Attending Names** - Now uses last name only throughout (consistent for stats grouping)
+- **Vascular Category Fix** - Import strips ", Cranial: Vascular Total" suffix from ACGME exports
+- **CPT Descriptions** - Stats now show descriptions for imported cases (uses cpt_inferred_note)
+- **Tab Renamed** - "Export" tab is now "Export/Import"
+- **JSON Payload Limit** - Increased to 10MB for large ACGME imports
+- **JSON Parsing** - More robust extraction of JSON from Gemini responses
+
+---
+
+## Previous Session (Jan 3)
 
 ### Core Features
 1. **Image Upload with AI Extraction** - Upload OR screenshots, AI (Gemini 3 Flash Preview) extracts case data
@@ -12,7 +32,7 @@
 3. **Manual Case Entry** - Option to enter cases without images
 4. **Case List View** - Searchable, with checkboxes for batch selection
 5. **Table View** - Compact summary table with hover tooltips showing full CPT descriptions
-6. **Stats/Analytics Dashboard** - Breakdowns by category, attending, CPT code (with avg duration), anesthesia staff
+6. **Stats/Analytics Dashboard** - Breakdowns by category, attending, CPT code (with avg duration), monthly trends
 7. **ACGME Submission Queue** - Select cases in webapp, queue them, then say "process ACGME queue" to submit via browser automation
 8. **CSV Export** - Download all cases for ACGME compliance
 9. **Image Attachments** - Attach pre/post-op imaging to cases (full quality, stored in uploads/)
@@ -23,33 +43,29 @@
 - **Site Logic**: "Other" for Towner/Sierens, "Rush University Medical Center" for all others
 - Marks cases as submitted in local database after successful submission
 
-### UI Improvements
-- Clickable ACGME badges to toggle submitted/pending status
-- Raw database entry shown with low opacity on case cards
-- Wider layout (1200px container)
-- Smaller fonts on table view for better fit
-- Full text wrapping in analytics (no truncation)
+---
+
+## Remaining Todo Items
+
+### Pending
+- [ ] Attach images directly from table view (quick attachment)
+- [ ] Date range filtering in stats dashboard
+- [ ] Quick filters on case list (by attending, category, status)
+- [ ] Mobile-friendly responsive design
+
+### Not Needed
+- ~~Role tracking~~ (not relevant for workflow)
+- ~~Cloud backup/sync~~ (local is fine)
+- ~~ACGME requirements tracker~~ (user declined)
+- ~~Bulk edit~~ (low priority)
 
 ---
 
-## Immediate Next Steps
+## Known Issues / Notes
 
-### 1. Duplicate Detection
-Detect and warn when uploading an image that matches an existing case (by MRN + date).
-
-### 2. Date Range Filtering
-Add date range filter to stats dashboard for time-based analysis.
-
----
-
-## Known Bugs / Loose Ends
-
-1. **No duplicate detection** - Uploading the same image twice creates duplicate cases
-2. **No edit from table view** - Must go to "My Cases" tab to edit
-3. **No date range filtering** in stats dashboard
-4. **Slash command `/submit-acgme` doesn't work** - Use "process ACGME queue" instead
-5. **Server must be manually restarted** after code changes (no hot reload)
-6. **No backup/restore** functionality for database
+1. **Slash command `/submit-acgme` doesn't work** - Use "process ACGME queue" instead
+2. **Server must be manually restarted** after code changes (no hot reload)
+3. **Existing imported data** - Re-import needed to fix old vascular categories or get CPT descriptions
 
 ---
 
@@ -77,7 +93,7 @@ case-logger/
 ├── acgme-queue.json       # Persisted queue for ACGME submission
 ├── uploads/               # Case image attachments (uploads/{case_id}/)
 ├── public/
-│   ├── index.html         # Main UI (5 tabs: Upload, My Cases, Table, Stats, Export)
+│   ├── index.html         # Main UI (5 tabs: Upload, My Cases, Table, Stats, Export/Import)
 │   ├── style.css          # All styling (green/sage theme)
 │   └── app.js             # Frontend logic, form handling, stats rendering
 └── .claude/
@@ -102,7 +118,28 @@ case_images (
 )
 ```
 
-### Neurosurgery Attendings
+### API Endpoints
+- `POST /api/upload` - Upload images, returns AI-extracted data
+- `POST /api/cases` - Save a case to database
+- `GET /api/cases` - Get all cases (includes image_count)
+- `GET /api/cases/:id` - Get single case by ID
+- `GET /api/cases/search?q=` - Search cases
+- `GET /api/cases/check-duplicate?mrn=&date=` - Check for duplicate cases
+- `PUT /api/cases/:id` - Update a case
+- `DELETE /api/cases/:id` - Delete a case
+- `POST /api/cases/:id/mark-submitted` - Mark case as submitted to ACGME
+- `POST /api/cases/:id/unmark-submitted` - Mark case as pending ACGME
+- `POST /api/cases/:id/images` - Upload image attachments
+- `GET /api/cases/:id/images` - Get images for a case
+- `GET /api/images/:imageId` - Serve an image file
+- `DELETE /api/images/:imageId` - Delete an image
+- `POST /api/import` - Bulk import cases from ACGME CSV
+- `POST /api/acgme-queue` - Add case IDs to submission queue
+- `GET /api/acgme-queue` - Get queued cases
+- `DELETE /api/acgme-queue` - Clear the queue
+- `GET /api/export/csv` - Export all cases as CSV
+
+### Neurosurgery Attendings (Last Name Only)
 Munich, Fontes, Sani, Mallela, Wang, Dewald, Deutsch, O'Toole, Munoz, Chen, Crowley, Traynelis, Jimenez, Zelby, Luken, Boco, **Towner**, **Sierens**
 
 *Note: Towner and Sierens cases use Site = "Other" in ACGME*
@@ -130,3 +167,10 @@ node server.js
 2. In Claude Code: Say "process ACGME queue"
 3. Browser automation fills ACGME form for each case
 4. Cases marked as submitted in local database
+
+## ACGME Import Workflow
+
+1. Export case log from ACGME website as CSV
+2. Go to Export/Import tab → Click "Select CSV File"
+3. Review preview of cases to import
+4. Click "Import All" - cases imported and marked as already submitted
