@@ -594,16 +594,27 @@ document.querySelectorAll('.tab').forEach(tab => {
 let tableSortField = 'date_of_surgery';
 let tableSortAsc = false; // Default to descending (newest first)
 let tableCasesCache = [];
+let tableObserver = null;
+const tableRenderState = {
+  all: [],
+  offset: 0,
+  pageSize: 60
+};
 const tableFilters = {
   attending: '',
   category: '',
+  startDate: '',
+  endDate: '',
   status: ''
 };
 
 const tableFilterAttending = document.getElementById('tableFilterAttending');
 const tableFilterCategory = document.getElementById('tableFilterCategory');
+const tableFilterStartDate = document.getElementById('tableFilterStartDate');
+const tableFilterEndDate = document.getElementById('tableFilterEndDate');
 const tableFilterStatus = document.getElementById('tableFilterStatus');
 const clearTableFilters = document.getElementById('clearTableFilters');
+const tableSentinel = document.getElementById('tableSentinel');
 
 // Load cases into the table view
 async function loadCasesTable() {
@@ -626,6 +637,10 @@ function renderCasesTable(cases) {
   updateSortIcons();
 
   const tbody = document.getElementById('casesTableBody');
+  tbody.innerHTML = '';
+  tableRenderState.all = sorted;
+  tableRenderState.offset = 0;
+
   if (sorted.length === 0) {
     const emptyMessage = hasActiveFilters(tableFilters)
       ? 'No cases match current filters.'
@@ -637,15 +652,34 @@ function renderCasesTable(cases) {
       selectAll.indeterminate = false;
     }
     updateTableSelection();
+    if (tableSentinel) {
+      tableSentinel.classList.add('hidden');
+    }
     return;
   }
 
-  tbody.innerHTML = sorted.map(c => {
-      // Use cpt_inferred_note first (from DB), fall back to CPT reference
-      const cptDesc = c.cpt_inferred_note || (c.cpt_code ? CPT_DESCRIPTIONS[c.cpt_code] : '') || '';
-      const cptDisplay = cptDesc ? `${truncate(cptDesc, 30)} (${c.cpt_code})` : (c.cpt_code || '-');
-      const cptTitle = cptDesc ? `${cptDesc} (${c.cpt_code})` : '';
-      return `
+  renderNextTablePage();
+  ensureTableObserver();
+
+  if (tableSentinel) {
+    tableSentinel.textContent = 'Loading more...';
+    tableSentinel.classList.toggle('hidden', tableRenderState.offset >= tableRenderState.all.length);
+  }
+
+  const selectAll = document.getElementById('selectAllTable');
+  if (selectAll) {
+    selectAll.checked = false;
+    selectAll.indeterminate = false;
+  }
+  updateTableSelection();
+}
+
+function renderTableRow(c) {
+  // Use cpt_inferred_note first (from DB), fall back to CPT reference
+  const cptDesc = c.cpt_inferred_note || (c.cpt_code ? CPT_DESCRIPTIONS[c.cpt_code] : '') || '';
+  const cptDisplay = cptDesc ? `${truncate(cptDesc, 30)} (${c.cpt_code})` : (c.cpt_code || '-');
+  const cptTitle = cptDesc ? `${cptDesc} (${c.cpt_code})` : '';
+  return `
       <tr data-id="${c.id}">
         <td style="text-align: center;">
           <input type="checkbox" class="table-select-checkbox" data-id="${c.id}" onchange="updateTableSelection()">
@@ -674,14 +708,36 @@ function renderCasesTable(cases) {
           <button class="btn-table-edit" onclick="editCase(${c.id})">Edit</button>
         </td>
       </tr>
-    `}).join('');
+  `;
+}
 
-  const selectAll = document.getElementById('selectAllTable');
-  if (selectAll) {
-    selectAll.checked = false;
-    selectAll.indeterminate = false;
+function renderNextTablePage() {
+  const tbody = document.getElementById('casesTableBody');
+  const start = tableRenderState.offset;
+  const end = Math.min(start + tableRenderState.pageSize, tableRenderState.all.length);
+  const slice = tableRenderState.all.slice(start, end);
+
+  if (slice.length > 0) {
+    tbody.insertAdjacentHTML('beforeend', slice.map(renderTableRow).join(''));
   }
-  updateTableSelection();
+
+  tableRenderState.offset = end;
+  if (tableSentinel) {
+    tableSentinel.classList.toggle('hidden', tableRenderState.offset >= tableRenderState.all.length);
+  }
+}
+
+function ensureTableObserver() {
+  if (tableObserver || !tableSentinel) return;
+  tableObserver = new IntersectionObserver((entries) => {
+    entries.forEach(entry => {
+      if (entry.isIntersecting && tableRenderState.offset < tableRenderState.all.length) {
+        renderNextTablePage();
+        updateTableSelection();
+      }
+    });
+  }, { rootMargin: '200px' });
+  tableObserver.observe(tableSentinel);
 }
 
 // Sort cases by field
@@ -752,6 +808,16 @@ tableFilterCategory?.addEventListener('change', () => {
   renderCasesTable(tableCasesCache);
 });
 
+tableFilterStartDate?.addEventListener('change', () => {
+  tableFilters.startDate = tableFilterStartDate.value || '';
+  renderCasesTable(tableCasesCache);
+});
+
+tableFilterEndDate?.addEventListener('change', () => {
+  tableFilters.endDate = tableFilterEndDate.value || '';
+  renderCasesTable(tableCasesCache);
+});
+
 tableFilterStatus?.addEventListener('change', () => {
   tableFilters.status = normalizeSelectValue(tableFilterStatus.value);
   renderCasesTable(tableCasesCache);
@@ -760,9 +826,13 @@ tableFilterStatus?.addEventListener('change', () => {
 clearTableFilters?.addEventListener('click', () => {
   tableFilters.attending = '';
   tableFilters.category = '';
+  tableFilters.startDate = '';
+  tableFilters.endDate = '';
   tableFilters.status = '';
   if (tableFilterAttending) tableFilterAttending.value = '';
   if (tableFilterCategory) tableFilterCategory.value = '';
+  if (tableFilterStartDate) tableFilterStartDate.value = '';
+  if (tableFilterEndDate) tableFilterEndDate.value = '';
   if (tableFilterStatus) tableFilterStatus.value = '';
   renderCasesTable(tableCasesCache);
 });
@@ -1579,15 +1649,26 @@ function resetUploadArea() {
 const searchInput = document.getElementById('searchInput');
 const searchBtn = document.getElementById('searchBtn');
 const casesList = document.getElementById('casesList');
+const casesListSentinel = document.getElementById('casesListSentinel');
 const filterAttending = document.getElementById('filterAttending');
 const filterCategory = document.getElementById('filterCategory');
+const filterStartDate = document.getElementById('filterStartDate');
+const filterEndDate = document.getElementById('filterEndDate');
 const filterStatus = document.getElementById('filterStatus');
 const clearFiltersBtn = document.getElementById('clearFiltersBtn');
 
 let casesCache = [];
+let casesObserver = null;
+const caseRenderState = {
+  all: [],
+  offset: 0,
+  pageSize: 40
+};
 const caseFilters = {
   attending: '',
   category: '',
+  startDate: '',
+  endDate: '',
   status: ''
 };
 
@@ -1635,6 +1716,11 @@ function filterCasesByCriteria(cases, filters) {
     });
   }
 
+  if (filters.startDate || filters.endDate) {
+    const dateFiltered = filterCasesByDateRange(filtered, filters.startDate, filters.endDate);
+    filtered = dateFiltered.filtered;
+  }
+
   return filtered;
 }
 
@@ -1666,6 +1752,7 @@ async function loadCases(searchQuery = '') {
 
 // Display cases in the list
 function displayCases(cases) {
+  const batchActionsBar = document.getElementById('batchActionsBar');
   if (cases.length === 0) {
     casesList.innerHTML = `
       <div class="empty-state">
@@ -1674,14 +1761,24 @@ function displayCases(cases) {
         <p>Upload images to start logging your cases</p>
       </div>
     `;
+    if (batchActionsBar) {
+      batchActionsBar.classList.add('hidden');
+    }
+    if (casesListSentinel) {
+      casesListSentinel.classList.add('hidden');
+    }
     return;
   }
 
   // Show batch actions bar
-  const batchActionsBar = document.getElementById('batchActionsBar');
-  batchActionsBar.classList.remove('hidden');
+  if (batchActionsBar) {
+    batchActionsBar.classList.remove('hidden');
+  }
+  resetCasesInfiniteScroll(cases);
+}
 
-  casesList.innerHTML = cases.map(c => `
+function renderCaseCard(c) {
+  return `
     <div class="case-card" data-id="${c.id}">
       <div class="case-card-header">
         <input type="checkbox" class="case-checkbox" data-id="${c.id}" onchange="updateSelectedCount()">
@@ -1722,11 +1819,52 @@ function displayCases(cases) {
         <button class="btn danger" onclick="deleteCase(${c.id})">Delete</button>
       </div>
     </div>
-  `).join('');
+  `;
+}
+
+function resetCasesInfiniteScroll(cases) {
+  caseRenderState.all = cases;
+  caseRenderState.offset = 0;
+  casesList.innerHTML = '';
+
+  if (casesListSentinel) {
+    casesListSentinel.textContent = 'Loading more...';
+    casesListSentinel.classList.toggle('hidden', cases.length === 0);
+  }
+
+  renderNextCasesPage();
+  ensureCasesObserver();
 
   // Reset select all checkbox
   document.getElementById('selectAllCases').checked = false;
   updateSelectedCount();
+}
+
+function renderNextCasesPage() {
+  const start = caseRenderState.offset;
+  const end = Math.min(start + caseRenderState.pageSize, caseRenderState.all.length);
+  const slice = caseRenderState.all.slice(start, end);
+
+  if (slice.length > 0) {
+    casesList.insertAdjacentHTML('beforeend', slice.map(renderCaseCard).join(''));
+  }
+
+  caseRenderState.offset = end;
+  if (casesListSentinel && caseRenderState.offset >= caseRenderState.all.length) {
+    casesListSentinel.classList.add('hidden');
+  }
+}
+
+function ensureCasesObserver() {
+  if (casesObserver || !casesListSentinel) return;
+  casesObserver = new IntersectionObserver((entries) => {
+    entries.forEach(entry => {
+      if (entry.isIntersecting && caseRenderState.offset < caseRenderState.all.length) {
+        renderNextCasesPage();
+      }
+    });
+  }, { rootMargin: '200px' });
+  casesObserver.observe(casesListSentinel);
 }
 
 // Search cases
@@ -1750,6 +1888,16 @@ filterCategory?.addEventListener('change', () => {
   applyCaseFilters();
 });
 
+filterStartDate?.addEventListener('change', () => {
+  caseFilters.startDate = filterStartDate.value || '';
+  applyCaseFilters();
+});
+
+filterEndDate?.addEventListener('change', () => {
+  caseFilters.endDate = filterEndDate.value || '';
+  applyCaseFilters();
+});
+
 filterStatus?.addEventListener('change', () => {
   caseFilters.status = normalizeSelectValue(filterStatus.value);
   applyCaseFilters();
@@ -1758,9 +1906,13 @@ filterStatus?.addEventListener('change', () => {
 clearFiltersBtn?.addEventListener('click', () => {
   caseFilters.attending = '';
   caseFilters.category = '';
+  caseFilters.startDate = '';
+  caseFilters.endDate = '';
   caseFilters.status = '';
   if (filterAttending) filterAttending.value = '';
   if (filterCategory) filterCategory.value = '';
+  if (filterStartDate) filterStartDate.value = '';
+  if (filterEndDate) filterEndDate.value = '';
   if (filterStatus) filterStatus.value = '';
   applyCaseFilters();
 });

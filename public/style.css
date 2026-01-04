@@ -426,6 +426,13 @@ header h1::before {
   color: var(--sage-600);
 }
 
+.scroll-sentinel {
+  text-align: center;
+  color: var(--sage-500);
+  font-size: 0.85rem;
+  padding: 12px 0 4px;
+}
+
 /* Cases List */
 .case-card {
   background: linear-gradient(135deg, var(--green-50) 0%, white 100%);

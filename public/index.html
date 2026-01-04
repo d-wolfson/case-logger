@@ -206,6 +206,14 @@
           </select>
         </div>
         <div class="filter-group">
+          <label for="filterStartDate">From</label>
+          <input type="date" id="filterStartDate">
+        </div>
+        <div class="filter-group">
+          <label for="filterEndDate">To</label>
+          <input type="date" id="filterEndDate">
+        </div>
+        <div class="filter-group">
           <label for="filterStatus">Status</label>
           <select id="filterStatus">
             <option value="">All</option>
@@ -232,6 +240,7 @@
       <div id="casesList">
         <!-- Cases will be loaded here -->
       </div>
+      <div id="casesListSentinel" class="scroll-sentinel hidden">Loading more...</div>
     </section>
 
     <!-- Table Tab -->
@@ -256,6 +265,14 @@
             <select id="tableFilterCategory">
               <option value="">All</option>
             </select>
+          </div>
+          <div class="filter-group">
+            <label for="tableFilterStartDate">From</label>
+            <input type="date" id="tableFilterStartDate">
+          </div>
+          <div class="filter-group">
+            <label for="tableFilterEndDate">To</label>
+            <input type="date" id="tableFilterEndDate">
           </div>
           <div class="filter-group">
             <label for="tableFilterStatus">Status</label>
@@ -288,6 +305,7 @@
             </tbody>
           </table>
         </div>
+        <div id="tableSentinel" class="scroll-sentinel hidden">Loading more...</div>
       </div>
     </section>
 
