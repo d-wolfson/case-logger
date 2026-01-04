@@ -8,11 +8,12 @@ AI-powered surgical case logging app for neurosurgery residents. Upload OR scree
 - CPT inference and ACGME category suggestions
 - Duplicate detection (MRN + date)
 - Searchable case list with bulk actions
-- Table view with sorting and quick filters
+- Table view with sorting, filters, and infinite scroll rendering
 - Attach imaging to cases
 - Analytics dashboard with monthly trends
 - ACGME queue + browser automation workflow
 - CSV import/export for ACGME
+- Full backup/restore (database, queue, attachments)
 
 ## Tech Stack
 - Backend: Node.js + Express
@@ -79,6 +80,11 @@ Tips:
 ### 5) Export Cases to CSV
 1. Go to **Export/Import** tab.
 2. Click **Download CSV**.
+
+### 6) Full Backup / Restore
+1. Go to **Export/Import** tab.
+2. Click **Download Backup** to save a zip of `database.db`, `uploads/`, and `acgme-queue.json`.
+3. To restore, click **Restore Backup** and select the zip (this replaces current data).
 
 ## ACGME Submission Workflow (Claude Code)
 This project uses a Claude Code browser automation workflow to submit cases into ACGME.

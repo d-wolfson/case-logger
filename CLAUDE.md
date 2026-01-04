@@ -132,16 +132,18 @@ The app includes a comprehensive neurosurgery CPT code reference for AI inferenc
 - [x] Edit from table view (edit button)
 
 ### Pending
-- [ ] Attach images directly from table view
-- [ ] Date range filtering in stats
-- [ ] Quick filters on case list (attending, category, status)
-- [ ] Mobile-friendly responsive design
+- [ ] Follow-up field + queue (see Takeaways)
 
 ### Not Needed
 - ~~Role tracking~~ (not relevant for workflow)
 - ~~Cloud backup/sync~~ (local is fine)
 - ~~ACGME requirements tracker~~ (user declined)
 - ~~Bulk edit~~ (low priority)
+
+## Takeaways (Latest Discussion)
+- One-time procedure name replacement by MRN + date completed; backup and reports kept in repo (`database.db.bak-*`, `procedure-update-results*.csv`).
+- Follow-up tracking is the next feature: add `follow_up` detail field + status + optional due date, with filters and a “Follow-Up Due” queue tab.
+- Infinite scroll rendering and date filters are live for My Cases and Table to reduce load lag.
 
 ## Case Category Taxonomy (ACGME-Aligned)
 

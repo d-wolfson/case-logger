@@ -48,10 +48,7 @@
 ## Remaining Todo Items
 
 ### Pending
-- [ ] Attach images directly from table view (quick attachment)
-- [ ] Date range filtering in stats dashboard
-- [ ] Quick filters on case list (by attending, category, status)
-- [ ] Mobile-friendly responsive design
+- [ ] Follow-up field + queue (see Takeaways)
 
 ### Not Needed
 - ~~Role tracking~~ (not relevant for workflow)
@@ -174,3 +171,10 @@ node server.js
 2. Go to Export/Import tab → Click "Select CSV File"
 3. Review preview of cases to import
 4. Click "Import All" - cases imported and marked as already submitted
+
+---
+
+## Takeaways (Latest Discussion)
+1. **Procedure name update complete**: Applied MRN + date replacement from CSV with fallback rules; backup and reports kept in repo (`database.db.bak-*`, `procedure-update-results*.csv`).
+2. **Follow-up tracking next**: Add `follow_up` detail field on upload/edit, plus follow-up status and optional due date; add filters and a “Follow-Up Due” queue (likely a new tab).
+3. **Recent updates**: Infinite scroll rendering + date range filters are live for My Cases and Table to address lag.
