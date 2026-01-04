@@ -831,6 +831,23 @@ header h1::before {
   background: var(--sage-50);
 }
 
+.btn-table-edit {
+  padding: 0.25rem 0.5rem;
+  font-size: 0.7rem;
+  background: var(--sage-100);
+  border: 1px solid var(--sage-300);
+  border-radius: var(--radius);
+  cursor: pointer;
+  color: var(--sage-700);
+  transition: all 0.2s;
+}
+
+.btn-table-edit:hover {
+  background: var(--green-100);
+  border-color: var(--green-400);
+  color: var(--green-800);
+}
+
 #casesTable .procedure-cell,
 #casesTable .truncate-cell {
   max-width: 200px;

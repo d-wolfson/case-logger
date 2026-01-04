@@ -598,7 +598,7 @@ async function loadCasesTable() {
 
     const tbody = document.getElementById('casesTableBody');
     if (cases.length === 0) {
-      tbody.innerHTML = '<tr><td colspan="8" style="text-align: center; color: #666;">No cases yet. Upload some images to get started.</td></tr>';
+      tbody.innerHTML = '<tr><td colspan="9" style="text-align: center; color: #666;">No cases yet. Upload some images to get started.</td></tr>';
       return;
     }
 
@@ -623,6 +623,9 @@ async function loadCasesTable() {
                 title="Click to toggle">
             ${c.submitted_to_acgme ? '✓' : '○'}
           </span>
+        </td>
+        <td>
+          <button class="btn-table-edit" onclick="editCase(${c.id})">Edit</button>
         </td>
       </tr>
     `}).join('');
