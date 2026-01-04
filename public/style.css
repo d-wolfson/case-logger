@@ -472,6 +472,41 @@ header h1::before {
   margin-bottom: 10px;
 }
 
+.followup-badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.25rem;
+  white-space: nowrap;
+  font-size: 0.7rem;
+  padding: 0.2rem 0.5rem;
+  border-radius: 999px;
+  font-weight: 600;
+  margin-left: 0.5rem;
+  background: var(--sage-200);
+  color: var(--sage-700);
+}
+
+.followup-badge.needed {
+  background: #fef3c7;
+  color: #92400e;
+}
+
+.followup-badge.due,
+.followup-badge.due.due {
+  background: #fee2e2;
+  color: var(--danger);
+}
+
+.followup-badge.done {
+  background: var(--green-200);
+  color: var(--green-800);
+}
+
+.followup-badge.small {
+  font-size: 0.65rem;
+  padding: 0.15rem 0.4rem;
+}
+
 .case-card .meta {
   display: grid;
   grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
@@ -1153,6 +1188,39 @@ header h1::before {
   padding: 1.5rem;
 }
 
+/* Follow-Up View */
+.followup-view {
+  background: white;
+  border-radius: 12px;
+  padding: 1.5rem;
+}
+
+.followup-view h2 {
+  margin-bottom: 0.5rem;
+  color: var(--sage-800);
+}
+
+.followup-card {
+  background: linear-gradient(135deg, var(--green-50) 0%, white 100%);
+  border-radius: var(--radius);
+  padding: 16px;
+  margin-bottom: 12px;
+  border: 1px solid var(--green-100);
+}
+
+.followup-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 12px;
+}
+
+.followup-header h3 {
+  margin: 0;
+  color: var(--green-800);
+  font-size: 1rem;
+}
+
 .stats-view h2 {
   margin-bottom: 1rem;
   color: var(--sage-800);
@@ -1321,6 +1389,11 @@ header h1::before {
 }
 
 .img-badge {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 0.2rem;
+  white-space: nowrap;
   cursor: pointer;
   padding: 0.1rem 0.3rem;
   border-radius: 4px;

@@ -1872,7 +1872,7 @@ function getFollowUpBadge(caseData) {
       : 'Scheduled';
   const dueText = dueDate ? ` • ${dueDate}` : '';
   const dueClass = isPastDue ? 'due' : '';
-  return `<span class="followup-badge ${status} ${dueClass}">FU ${label}${dueText}</span>`;
+  return `<span class="followup-badge ${status} ${dueClass}">F/U ${label}${dueText}</span>`;
 }
 
 function renderCaseCard(c) {
@@ -2063,7 +2063,7 @@ function renderFollowUpList(cases) {
       <div class="followup-card">
         <div class="followup-header">
           <h3>${c.procedure_name || 'Unnamed Procedure'}</h3>
-          <span class="followup-badge ${status} ${badgeClass}">FU ${statusLabel}</span>
+          <span class="followup-badge ${status} ${badgeClass}">F/U ${statusLabel}</span>
         </div>
         <div class="meta">
           <div class="meta-item"><strong>Date:</strong> ${c.date_of_surgery || 'N/A'}</div>
