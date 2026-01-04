@@ -192,6 +192,29 @@
         <input type="text" id="searchInput" placeholder="Search by procedure, surgeon, CPT code...">
         <button id="searchBtn" class="btn">Search</button>
       </div>
+      <div class="filter-bar">
+        <div class="filter-group">
+          <label for="filterAttending">Attending</label>
+          <select id="filterAttending">
+            <option value="">All</option>
+          </select>
+        </div>
+        <div class="filter-group">
+          <label for="filterCategory">Category</label>
+          <select id="filterCategory">
+            <option value="">All</option>
+          </select>
+        </div>
+        <div class="filter-group">
+          <label for="filterStatus">Status</label>
+          <select id="filterStatus">
+            <option value="">All</option>
+            <option value="submitted">ACGME Submitted</option>
+            <option value="pending">Pending</option>
+          </select>
+        </div>
+        <button id="clearFiltersBtn" class="btn secondary">Clear Filters</button>
+      </div>
 
       <!-- Batch Actions Bar -->
       <div id="batchActionsBar" class="batch-actions-bar hidden">
@@ -221,6 +244,29 @@
             <button class="btn btn-danger" onclick="deleteSelectedCases()">Delete Selected</button>
           </div>
         </div>
+        <div class="table-filters">
+          <div class="filter-group">
+            <label for="tableFilterAttending">Attending</label>
+            <select id="tableFilterAttending">
+              <option value="">All</option>
+            </select>
+          </div>
+          <div class="filter-group">
+            <label for="tableFilterCategory">Category</label>
+            <select id="tableFilterCategory">
+              <option value="">All</option>
+            </select>
+          </div>
+          <div class="filter-group">
+            <label for="tableFilterStatus">Status</label>
+            <select id="tableFilterStatus">
+              <option value="">All</option>
+              <option value="submitted">ACGME Submitted</option>
+              <option value="pending">Pending</option>
+            </select>
+          </div>
+          <button id="clearTableFilters" class="btn secondary">Clear Filters</button>
+        </div>
         <div class="table-container">
           <table id="casesTable">
             <thead>
@@ -249,6 +295,18 @@
     <section id="stats" class="tab-content">
       <div class="stats-view">
         <h2>Analytics Dashboard</h2>
+        <div class="stats-filters">
+          <div class="filter-group">
+            <label for="statsStartDate">From</label>
+            <input type="date" id="statsStartDate">
+          </div>
+          <div class="filter-group">
+            <label for="statsEndDate">To</label>
+            <input type="date" id="statsEndDate">
+          </div>
+          <button id="clearStatsDates" class="btn secondary">Clear</button>
+          <span id="statsFilterSummary" class="filter-summary"></span>
+        </div>
 
         <!-- Overview Stats -->
         <div class="stats-panel" id="statsPanel">

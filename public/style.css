@@ -380,6 +380,52 @@ header h1::before {
   background: white;
 }
 
+/* Filters */
+.filter-bar,
+.table-filters,
+.stats-filters {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 12px;
+  align-items: flex-end;
+  margin-bottom: 20px;
+}
+
+.filter-group {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  min-width: 160px;
+}
+
+.filter-group label {
+  font-size: 0.7rem;
+  text-transform: uppercase;
+  letter-spacing: 0.4px;
+  color: var(--sage-600);
+}
+
+.filter-group select,
+.filter-group input[type="date"] {
+  padding: 10px 12px;
+  border: 1px solid var(--sage-200);
+  border-radius: var(--radius);
+  font-size: 0.9rem;
+  background: var(--green-50);
+}
+
+.filter-group select:focus,
+.filter-group input[type="date"]:focus {
+  outline: none;
+  border-color: var(--green-500);
+  background: white;
+}
+
+.filter-summary {
+  font-size: 0.8rem;
+  color: var(--sage-600);
+}
+
 /* Cases List */
 .case-card {
   background: linear-gradient(135deg, var(--green-50) 0%, white 100%);
@@ -1149,6 +1195,22 @@ header h1::before {
 @media (max-width: 900px) {
   .stats-grid {
     grid-template-columns: 1fr;
+  }
+}
+
+@media (max-width: 700px) {
+  .filter-group {
+    min-width: 100%;
+  }
+
+  .filter-bar,
+  .table-filters,
+  .stats-filters {
+    gap: 8px;
+  }
+
+  .filter-summary {
+    width: 100%;
   }
 }
 

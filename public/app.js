@@ -593,26 +593,54 @@ document.querySelectorAll('.tab').forEach(tab => {
 // Table sorting state
 let tableSortField = 'date_of_surgery';
 let tableSortAsc = false; // Default to descending (newest first)
+let tableCasesCache = [];
+const tableFilters = {
+  attending: '',
+  category: '',
+  status: ''
+};
+
+const tableFilterAttending = document.getElementById('tableFilterAttending');
+const tableFilterCategory = document.getElementById('tableFilterCategory');
+const tableFilterStatus = document.getElementById('tableFilterStatus');
+const clearTableFilters = document.getElementById('clearTableFilters');
 
 // Load cases into the table view
 async function loadCasesTable() {
   try {
     const response = await fetch('/api/cases');
-    let cases = await response.json();
+    const cases = await response.json();
+    tableCasesCache = cases;
+    updateSelectOptions(tableFilterAttending, cases.map(c => c.attending_surgeon), 'All');
+    updateSelectOptions(tableFilterCategory, cases.map(c => c.case_category), 'All');
+    renderCasesTable(tableCasesCache);
+  } catch (error) {
+    console.error('Error loading table:', error);
+  }
+}
 
-    // Sort cases
-    cases = sortCases(cases, tableSortField, tableSortAsc);
+function renderCasesTable(cases) {
+  const filtered = filterCasesByCriteria(cases, tableFilters);
+  const sorted = sortCases(filtered, tableSortField, tableSortAsc);
 
-    // Update sort icons
-    updateSortIcons();
+  updateSortIcons();
 
-    const tbody = document.getElementById('casesTableBody');
-    if (cases.length === 0) {
-      tbody.innerHTML = '<tr><td colspan="10" style="text-align: center; color: #666;">No cases yet. Upload some images to get started.</td></tr>';
-      return;
+  const tbody = document.getElementById('casesTableBody');
+  if (sorted.length === 0) {
+    const emptyMessage = hasActiveFilters(tableFilters)
+      ? 'No cases match current filters.'
+      : 'No cases yet. Upload some images to get started.';
+    tbody.innerHTML = `<tr><td colspan="10" style="text-align: center; color: #666;">${emptyMessage}</td></tr>`;
+    const selectAll = document.getElementById('selectAllTable');
+    if (selectAll) {
+      selectAll.checked = false;
+      selectAll.indeterminate = false;
     }
+    updateTableSelection();
+    return;
+  }
 
-    tbody.innerHTML = cases.map(c => {
+  tbody.innerHTML = sorted.map(c => {
       // Use cpt_inferred_note first (from DB), fall back to CPT reference
       const cptDesc = c.cpt_inferred_note || (c.cpt_code ? CPT_DESCRIPTIONS[c.cpt_code] : '') || '';
       const cptDisplay = cptDesc ? `${truncate(cptDesc, 30)} (${c.cpt_code})` : (c.cpt_code || '-');
@@ -647,9 +675,13 @@ async function loadCasesTable() {
         </td>
       </tr>
     `}).join('');
-  } catch (error) {
-    console.error('Error loading table:', error);
+
+  const selectAll = document.getElementById('selectAllTable');
+  if (selectAll) {
+    selectAll.checked = false;
+    selectAll.indeterminate = false;
   }
+  updateTableSelection();
 }
 
 // Sort cases by field
@@ -708,6 +740,31 @@ document.querySelectorAll('#casesTable th.sortable').forEach(th => {
     }
     loadCasesTable();
   });
+});
+
+tableFilterAttending?.addEventListener('change', () => {
+  tableFilters.attending = normalizeSelectValue(tableFilterAttending.value);
+  renderCasesTable(tableCasesCache);
+});
+
+tableFilterCategory?.addEventListener('change', () => {
+  tableFilters.category = normalizeSelectValue(tableFilterCategory.value);
+  renderCasesTable(tableCasesCache);
+});
+
+tableFilterStatus?.addEventListener('change', () => {
+  tableFilters.status = normalizeSelectValue(tableFilterStatus.value);
+  renderCasesTable(tableCasesCache);
+});
+
+clearTableFilters?.addEventListener('click', () => {
+  tableFilters.attending = '';
+  tableFilters.category = '';
+  tableFilters.status = '';
+  if (tableFilterAttending) tableFilterAttending.value = '';
+  if (tableFilterCategory) tableFilterCategory.value = '';
+  if (tableFilterStatus) tableFilterStatus.value = '';
+  renderCasesTable(tableCasesCache);
 });
 
 // Table selection functions
@@ -782,11 +839,28 @@ async function loadStats() {
   try {
     const response = await fetch('/api/cases');
     const cases = await response.json();
+    const statsStartDate = document.getElementById('statsStartDate');
+    const statsEndDate = document.getElementById('statsEndDate');
+    const statsFilterSummary = document.getElementById('statsFilterSummary');
 
-    const total = cases.length;
-    const submitted = cases.filter(c => c.submitted_to_acgme).length;
+    const startValue = statsStartDate?.value || '';
+    const endValue = statsEndDate?.value || '';
+    let filteredCases = cases;
+
+    if (startValue || endValue) {
+      const dateFiltered = filterCasesByDateRange(cases, startValue, endValue);
+      filteredCases = dateFiltered.filtered;
+      if (statsFilterSummary) {
+        statsFilterSummary.textContent = `Showing ${filteredCases.length} of ${cases.length} cases`;
+      }
+    } else if (statsFilterSummary) {
+      statsFilterSummary.textContent = '';
+    }
+
+    const total = filteredCases.length;
+    const submitted = filteredCases.filter(c => c.submitted_to_acgme).length;
     const pending = total - submitted;
-    const durations = cases.filter(c => c.case_duration).map(c => parseInt(c.case_duration) || 0);
+    const durations = filteredCases.filter(c => c.case_duration).map(c => parseInt(c.case_duration) || 0);
     const avgDuration = durations.length > 0 ? Math.round(durations.reduce((a, b) => a + b, 0) / durations.length) : 0;
 
     // Update overview stats
@@ -796,21 +870,80 @@ async function loadStats() {
     document.getElementById('statAvgDuration').textContent = avgDuration;
 
     // By Category
-    renderBreakdown('statsByCategory', groupBy(cases, 'case_category'), total);
+    renderBreakdown('statsByCategory', groupBy(filteredCases, 'case_category'), total);
 
     // By Attending
-    renderBreakdown('statsByAttending', groupBy(cases, 'attending_surgeon'), total);
+    renderBreakdown('statsByAttending', groupBy(filteredCases, 'attending_surgeon'), total);
 
     // By CPT Code with avg duration
-    renderCptBreakdown('statsByCpt', cases);
+    renderCptBreakdown('statsByCpt', filteredCases);
 
     // Monthly Trends
-    renderMonthlyTrends('statsByMonth', cases);
+    renderMonthlyTrends('statsByMonth', filteredCases);
 
   } catch (error) {
     console.error('Error loading stats:', error);
   }
 }
+
+function parseCaseDate(dateStr) {
+  if (!dateStr) return null;
+  if (dateStr.includes('-')) {
+    const parts = dateStr.split('-');
+    if (parts.length === 3) {
+      const [year, month, day] = parts.map(Number);
+      return new Date(year, month - 1, day);
+    }
+  }
+  if (dateStr.includes('/')) {
+    const parts = dateStr.split('/');
+    if (parts.length === 3) {
+      const [month, day, year] = parts.map(Number);
+      return new Date(year, month - 1, day);
+    }
+  }
+  return null;
+}
+
+function filterCasesByDateRange(cases, startValue, endValue) {
+  let start = startValue ? new Date(startValue) : null;
+  let end = endValue ? new Date(endValue) : null;
+
+  if (start && end && start > end) {
+    const temp = start;
+    start = end;
+    end = temp;
+  }
+
+  const filtered = cases.filter(c => {
+    const caseDate = parseCaseDate(c.date_of_surgery);
+    if (!caseDate) return false;
+    if (start && caseDate < start) return false;
+    if (end && caseDate > end) return false;
+    return true;
+  });
+
+  return { filtered, start, end };
+}
+
+const statsStartDateInput = document.getElementById('statsStartDate');
+const statsEndDateInput = document.getElementById('statsEndDate');
+const clearStatsDates = document.getElementById('clearStatsDates');
+
+function refreshStatsIfActive() {
+  const statsTab = document.getElementById('stats');
+  if (statsTab && statsTab.classList.contains('active')) {
+    loadStats();
+  }
+}
+
+statsStartDateInput?.addEventListener('change', refreshStatsIfActive);
+statsEndDateInput?.addEventListener('change', refreshStatsIfActive);
+clearStatsDates?.addEventListener('click', () => {
+  if (statsStartDateInput) statsStartDateInput.value = '';
+  if (statsEndDateInput) statsEndDateInput.value = '';
+  refreshStatsIfActive();
+});
 
 // Group cases by a field
 function groupBy(cases, field) {
@@ -1446,6 +1579,69 @@ function resetUploadArea() {
 const searchInput = document.getElementById('searchInput');
 const searchBtn = document.getElementById('searchBtn');
 const casesList = document.getElementById('casesList');
+const filterAttending = document.getElementById('filterAttending');
+const filterCategory = document.getElementById('filterCategory');
+const filterStatus = document.getElementById('filterStatus');
+const clearFiltersBtn = document.getElementById('clearFiltersBtn');
+
+let casesCache = [];
+const caseFilters = {
+  attending: '',
+  category: '',
+  status: ''
+};
+
+function normalizeSelectValue(value) {
+  return (value || '').trim();
+}
+
+function updateSelectOptions(selectEl, values, placeholder) {
+  if (!selectEl) return;
+  const current = selectEl.value;
+  const uniqueValues = Array.from(new Set(values.filter(v => v && v.trim())))
+    .sort((a, b) => a.localeCompare(b));
+
+  selectEl.innerHTML = [
+    `<option value="">${placeholder}</option>`,
+    ...uniqueValues.map(v => `<option value="${escapeHtml(v)}">${escapeHtml(v)}</option>`)
+  ].join('');
+
+  if (current && uniqueValues.includes(current)) {
+    selectEl.value = current;
+  } else {
+    selectEl.value = '';
+  }
+}
+
+function hasActiveFilters(filters) {
+  return Boolean(filters.attending || filters.category || filters.status);
+}
+
+function filterCasesByCriteria(cases, filters) {
+  let filtered = [...cases];
+
+  if (filters.attending) {
+    filtered = filtered.filter(c => (c.attending_surgeon || '') === filters.attending);
+  }
+
+  if (filters.category) {
+    filtered = filtered.filter(c => (c.case_category || '') === filters.category);
+  }
+
+  if (filters.status) {
+    filtered = filtered.filter(c => {
+      const submitted = Boolean(c.submitted_to_acgme);
+      return filters.status === 'submitted' ? submitted : !submitted;
+    });
+  }
+
+  return filtered;
+}
+
+function applyCaseFilters() {
+  const filtered = filterCasesByCriteria(casesCache, caseFilters);
+  displayCases(filtered);
+}
 
 // Load all cases
 async function loadCases(searchQuery = '') {
@@ -1457,7 +1653,10 @@ async function loadCases(searchQuery = '') {
     const response = await fetch(url);
     const cases = await response.json();
 
-    displayCases(cases);
+    casesCache = cases;
+    updateSelectOptions(filterAttending, cases.map(c => c.attending_surgeon), 'All');
+    updateSelectOptions(filterCategory, cases.map(c => c.case_category), 'All');
+    applyCaseFilters();
 
   } catch (error) {
     console.error('Load cases error:', error);
@@ -1539,6 +1738,31 @@ searchInput.addEventListener('keypress', (e) => {
   if (e.key === 'Enter') {
     loadCases(searchInput.value);
   }
+});
+
+filterAttending?.addEventListener('change', () => {
+  caseFilters.attending = normalizeSelectValue(filterAttending.value);
+  applyCaseFilters();
+});
+
+filterCategory?.addEventListener('change', () => {
+  caseFilters.category = normalizeSelectValue(filterCategory.value);
+  applyCaseFilters();
+});
+
+filterStatus?.addEventListener('change', () => {
+  caseFilters.status = normalizeSelectValue(filterStatus.value);
+  applyCaseFilters();
+});
+
+clearFiltersBtn?.addEventListener('click', () => {
+  caseFilters.attending = '';
+  caseFilters.category = '';
+  caseFilters.status = '';
+  if (filterAttending) filterAttending.value = '';
+  if (filterCategory) filterCategory.value = '';
+  if (filterStatus) filterStatus.value = '';
+  applyCaseFilters();
 });
 
 // Delete a case
