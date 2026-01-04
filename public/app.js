@@ -1853,6 +1853,9 @@ async function editCase(id) {
 // --------------------------------------------
 const exportCsvBtn = document.getElementById('exportCsv');
 const exportStatus = document.getElementById('exportStatus');
+const backupBtn = document.getElementById('backupBtn');
+const restoreBtn = document.getElementById('restoreBtn');
+const restoreFileInput = document.getElementById('restoreFile');
 
 exportCsvBtn.addEventListener('click', async () => {
   try {
@@ -1881,6 +1884,89 @@ exportCsvBtn.addEventListener('click', async () => {
     console.error('Export error:', error);
     exportStatus.className = 'error';
     exportStatus.textContent = 'Error: ' + error.message;
+  }
+});
+
+backupBtn?.addEventListener('click', async () => {
+  try {
+    exportStatus.className = '';
+    exportStatus.textContent = 'Preparing backup...';
+    const response = await fetch('/api/backup');
+    if (!response.ok) {
+      throw new Error('Failed to create backup');
+    }
+
+    const blob = await response.blob();
+    const downloadUrl = window.URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    const disposition = response.headers.get('Content-Disposition') || '';
+    const match = disposition.match(/filename=([^;]+)/);
+    const filename = match ? match[1] : 'case-logger-backup.zip';
+    a.href = downloadUrl;
+    a.download = filename.replace(/"/g, '');
+    document.body.appendChild(a);
+    a.click();
+    window.URL.revokeObjectURL(downloadUrl);
+    a.remove();
+
+    exportStatus.className = 'success';
+    exportStatus.textContent = 'Backup downloaded successfully!';
+  } catch (error) {
+    exportStatus.className = 'error';
+    exportStatus.textContent = 'Error: ' + error.message;
+  }
+});
+
+restoreBtn?.addEventListener('click', () => {
+  restoreFileInput?.click();
+});
+
+restoreFileInput?.addEventListener('change', async (e) => {
+  const file = e.target.files[0];
+  if (!file) return;
+
+  const confirmMsg = 'Restore this backup?\n\nThis will replace your current database and attachments.';
+  if (!confirm(confirmMsg)) {
+    restoreFileInput.value = '';
+    return;
+  }
+
+  try {
+    exportStatus.className = '';
+    exportStatus.textContent = 'Restoring backup...';
+
+    const formData = new FormData();
+    formData.append('backup', file);
+
+    const response = await fetch('/api/restore', {
+      method: 'POST',
+      body: formData
+    });
+
+    const result = await response.json();
+    if (!response.ok || !result.success) {
+      throw new Error(result.error || 'Failed to restore backup');
+    }
+
+    const notices = [];
+    if (!result.restoredUploads) {
+      notices.push('attachments unchanged');
+    }
+    if (!result.restoredQueue) {
+      notices.push('queue unchanged');
+    }
+    const noticeText = notices.length ? ` (${notices.join(', ')})` : '';
+    exportStatus.className = 'success';
+    exportStatus.textContent = `Backup restored${noticeText}. Reloading data...`;
+
+    loadCases(searchInput?.value || '');
+    loadCasesTable();
+    loadStats();
+  } catch (error) {
+    exportStatus.className = 'error';
+    exportStatus.textContent = 'Error: ' + error.message;
+  } finally {
+    restoreFileInput.value = '';
   }
 });
 

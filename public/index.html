@@ -369,6 +369,19 @@
         </div>
 
         <div class="export-card">
+          <h3>Full Backup</h3>
+          <p>Download a full backup zip containing your database, attachments, and ACGME queue.</p>
+          <button id="backupBtn" class="btn primary">Download Backup</button>
+        </div>
+
+        <div class="export-card warning-card">
+          <h3>Restore Backup</h3>
+          <p>Restore from a backup zip. This will replace your current database and attachments.</p>
+          <input type="file" id="restoreFile" accept=".zip" hidden>
+          <button id="restoreBtn" class="btn danger">Restore Backup</button>
+        </div>
+
+        <div class="export-card">
           <h3>Import from ACGME</h3>
           <p>Import cases from an ACGME case log export (CSV). Cases will be marked as already submitted.</p>
           <input type="file" id="importFile" accept=".csv" hidden>

@@ -17,6 +17,8 @@ const express = require('express');        // Web server framework
 const multer = require('multer');          // Handles file uploads
 const path = require('path');              // Helps with file paths
 const fs = require('fs');                  // File system operations
+const archiver = require('archiver');      // Zip backup creator
+const unzipper = require('unzipper');      // Zip restore extractor
 const initSqlJs = require('sql.js');       // SQLite database
 const { GoogleGenerativeAI } = require('@google/generative-ai');
 
@@ -30,6 +32,7 @@ const genAI = new GoogleGenerativeAI(process.env.GEMINI_API_KEY);
 // --------------------------------------------
 const app = express();
 const PORT = 3000;  // Your app will run at http://localhost:3000
+const DB_PATH = path.join(__dirname, 'database.db');
 
 // Serve static files (HTML, CSS, JS) from the "public" folder
 app.use(express.static('public'));
@@ -47,8 +50,12 @@ const upload = multer({
 
 // Configure disk storage for image attachments
 const UPLOADS_DIR = path.join(__dirname, 'uploads');
+const RESTORE_TMP_DIR = path.join(__dirname, 'restore_tmp');
 if (!fs.existsSync(UPLOADS_DIR)) {
   fs.mkdirSync(UPLOADS_DIR, { recursive: true });
+}
+if (!fs.existsSync(RESTORE_TMP_DIR)) {
+  fs.mkdirSync(RESTORE_TMP_DIR, { recursive: true });
 }
 
 const attachmentStorage = multer.diskStorage({
@@ -79,22 +86,37 @@ const uploadAttachment = multer({
   }
 });
 
+const restoreUpload = multer({
+  dest: RESTORE_TMP_DIR,
+  limits: { fileSize: 200 * 1024 * 1024 },  // Max 200MB backup zip
+  fileFilter: (req, file, cb) => {
+    const isZip = file.mimetype === 'application/zip'
+      || file.mimetype === 'application/x-zip-compressed'
+      || file.originalname.toLowerCase().endsWith('.zip');
+    if (isZip) {
+      cb(null, true);
+    } else {
+      cb(new Error('Invalid file type. Only .zip backups allowed.'));
+    }
+  }
+});
+
 // --------------------------------------------
 // STEP 5: Initialize the database
 // --------------------------------------------
 let db;
+let SQL_INSTANCE;
 
 async function initDatabase() {
-  const SQL = await initSqlJs();
+  SQL_INSTANCE = await initSqlJs();
 
   // Check if database file exists
-  const dbPath = path.join(__dirname, 'database.db');
-  if (fs.existsSync(dbPath)) {
-    const fileBuffer = fs.readFileSync(dbPath);
-    db = new SQL.Database(fileBuffer);
+  if (fs.existsSync(DB_PATH)) {
+    const fileBuffer = fs.readFileSync(DB_PATH);
+    db = new SQL_INSTANCE.Database(fileBuffer);
     console.log('📂 Loaded existing database');
   } else {
-    db = new SQL.Database();
+    db = new SQL_INSTANCE.Database();
     console.log('📂 Created new database');
   }
 
@@ -165,7 +187,30 @@ async function initDatabase() {
 function saveDatabase() {
   const data = db.export();
   const buffer = Buffer.from(data);
-  fs.writeFileSync(path.join(__dirname, 'database.db'), buffer);
+  fs.writeFileSync(DB_PATH, buffer);
+}
+
+function formatBackupTimestamp(date) {
+  const pad = (n) => String(n).padStart(2, '0');
+  return `${date.getFullYear()}${pad(date.getMonth() + 1)}${pad(date.getDate())}-${pad(date.getHours())}${pad(date.getMinutes())}`;
+}
+
+function findPathByName(rootDir, targetName, targetType = 'file') {
+  if (!fs.existsSync(rootDir)) return null;
+  const entries = fs.readdirSync(rootDir, { withFileTypes: true });
+  for (const entry of entries) {
+    const fullPath = path.join(rootDir, entry.name);
+    if (entry.isDirectory()) {
+      if (targetType === 'dir' && entry.name === targetName) {
+        return fullPath;
+      }
+      const nested = findPathByName(fullPath, targetName, targetType);
+      if (nested) return nested;
+    } else if (entry.isFile() && targetType === 'file' && entry.name === targetName) {
+      return fullPath;
+    }
+  }
+  return null;
 }
 
 // Load CPT Reference from JSON file
@@ -1071,6 +1116,38 @@ app.get('/api/export/csv', (req, res) => {
   }
 });
 
+// Route: Full backup (database + uploads + queue)
+app.get('/api/backup', (req, res) => {
+  try {
+    const timestamp = formatBackupTimestamp(new Date());
+    const filename = `case-logger-backup-${timestamp}.zip`;
+    res.setHeader('Content-Type', 'application/zip');
+    res.setHeader('Content-Disposition', `attachment; filename=${filename}`);
+
+    const archive = archiver('zip', { zlib: { level: 9 } });
+    archive.on('error', (error) => {
+      console.error('❌ Backup archive error:', error);
+      res.status(500).end();
+    });
+    archive.pipe(res);
+
+    if (fs.existsSync(DB_PATH)) {
+      archive.file(DB_PATH, { name: 'database.db' });
+    }
+    if (fs.existsSync(ACGME_QUEUE_FILE)) {
+      archive.file(ACGME_QUEUE_FILE, { name: 'acgme-queue.json' });
+    }
+    if (fs.existsSync(UPLOADS_DIR)) {
+      archive.directory(UPLOADS_DIR, 'uploads');
+    }
+
+    archive.finalize();
+  } catch (error) {
+    console.error('❌ Error creating backup:', error);
+    res.status(500).json({ error: 'Failed to create backup' });
+  }
+});
+
 // Route: Bulk import cases (from ACGME CSV)
 app.post('/api/import', (req, res) => {
   try {
@@ -1147,6 +1224,71 @@ app.post('/api/import', (req, res) => {
   } catch (error) {
     console.error('❌ Error importing:', error);
     res.status(500).json({ error: 'Failed to import cases: ' + error.message });
+  }
+});
+
+// Route: Restore backup zip (database + uploads + queue)
+app.post('/api/restore', restoreUpload.single('backup'), async (req, res) => {
+  if (!req.file) {
+    return res.status(400).json({ error: 'Backup zip required' });
+  }
+
+  const uploadedZip = req.file.path;
+  const extractDir = path.join(RESTORE_TMP_DIR, `restore-${Date.now()}`);
+  let restoredUploads = false;
+  let restoredQueue = false;
+
+  try {
+    fs.mkdirSync(extractDir, { recursive: true });
+    await fs.createReadStream(uploadedZip)
+      .pipe(unzipper.Extract({ path: extractDir }))
+      .promise();
+
+    const extractedDb = findPathByName(extractDir, 'database.db', 'file');
+    if (!extractedDb) {
+      return res.status(400).json({ error: 'database.db not found in backup' });
+    }
+
+    const extractedQueue = findPathByName(extractDir, 'acgme-queue.json', 'file');
+    const extractedUploads = findPathByName(extractDir, 'uploads', 'dir');
+
+    fs.copyFileSync(extractedDb, DB_PATH);
+
+    if (extractedQueue) {
+      fs.copyFileSync(extractedQueue, ACGME_QUEUE_FILE);
+      restoredQueue = true;
+    }
+
+    if (extractedUploads) {
+      if (fs.existsSync(UPLOADS_DIR)) {
+        fs.rmSync(UPLOADS_DIR, { recursive: true, force: true });
+      }
+      fs.mkdirSync(UPLOADS_DIR, { recursive: true });
+      fs.cpSync(extractedUploads, UPLOADS_DIR, { recursive: true });
+      restoredUploads = true;
+    }
+
+    if (!SQL_INSTANCE) {
+      SQL_INSTANCE = await initSqlJs();
+    }
+    const fileBuffer = fs.readFileSync(DB_PATH);
+    db = new SQL_INSTANCE.Database(fileBuffer);
+
+    res.json({
+      success: true,
+      restoredUploads,
+      restoredQueue
+    });
+  } catch (error) {
+    console.error('❌ Error restoring backup:', error);
+    res.status(500).json({ error: 'Failed to restore backup' });
+  } finally {
+    try {
+      if (fs.existsSync(uploadedZip)) fs.unlinkSync(uploadedZip);
+      if (fs.existsSync(extractDir)) fs.rmSync(extractDir, { recursive: true, force: true });
+    } catch (cleanupError) {
+      console.error('Cleanup error:', cleanupError);
+    }
   }
 });
 

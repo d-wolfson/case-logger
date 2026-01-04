@@ -10,6 +10,9 @@ database.db
 # Uploaded images (contains patient imaging)
 uploads/
 
+# Restore temp
+restore_tmp/
+
 # Queue file
 acgme-queue.json
 
