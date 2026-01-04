@@ -178,3 +178,11 @@ node server.js
 1. **Procedure name update complete**: Applied MRN + date replacement from CSV with fallback rules; backup and reports kept in repo (`database.db.bak-*`, `procedure-update-results*.csv`).
 2. **Follow-up tracking next**: Add `follow_up` detail field on upload/edit, plus follow-up status and optional due date; add filters and a “Follow-Up Due” queue (likely a new tab).
 3. **Recent updates**: Infinite scroll rendering + date range filters are live for My Cases and Table to address lag.
+
+---
+
+## Next Steps (Session Resume)
+1. `cd ~/Documents/Projects/case-logger`
+2. `git pull`
+3. `npm start`
+4. Open http://localhost:3000
