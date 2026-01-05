@@ -259,6 +259,7 @@
           </select>
         </div>
         <button id="clearFiltersBtn" class="btn secondary">Clear Filters</button>
+        <button id="toggleExpandBtn" class="btn secondary" onclick="toggleExpandAllCases()">Collapse All</button>
       </div>
 
       <!-- Batch Actions Bar -->
@@ -336,14 +337,14 @@
             <thead>
               <tr>
                 <th style="width: 40px;"><input type="checkbox" id="selectAllTable" onchange="toggleSelectAllTable()"></th>
-                <th class="sortable" data-sort="date_of_surgery">Date <span class="sort-icon"></span></th>
+                <th class="sortable" data-sort="date_of_surgery" style="white-space: nowrap;">Date <span class="sort-icon"></span></th>
                 <th class="sortable" data-sort="patient_mrn">MRN <span class="sort-icon"></span></th>
                 <th class="sortable" data-sort="procedure_name">Procedure <span class="sort-icon"></span></th>
                 <th class="sortable" data-sort="cpt_code">CPT <span class="sort-icon"></span></th>
                 <th class="sortable" data-sort="attending_surgeon">Attending <span class="sort-icon"></span></th>
                 <th class="sortable" data-sort="case_category">Category <span class="sort-icon"></span></th>
                 <th class="sortable" data-sort="image_count">Img <span class="sort-icon"></span></th>
-                <th class="sortable" data-sort="follow_up_status">F/U <span class="sort-icon"></span></th>
+                <th class="sortable" data-sort="follow_up_status" style="text-align: center;">F/U <span class="sort-icon"></span></th>
                 <th class="sortable" data-sort="submitted_to_acgme">ACGME <span class="sort-icon"></span></th>
                 <th></th>
               </tr>
@@ -411,7 +412,7 @@
           </div>
           <div class="stat-card">
             <div class="stat-value" id="statAvgDuration">0</div>
-            <div class="stat-label">Avg Duration (min)</div>
+            <div class="stat-label">Avg Duration</div>
           </div>
         </div>
 
@@ -461,18 +462,18 @@
           <button id="backupBtn" class="btn primary">Download Backup</button>
         </div>
 
+        <div class="export-card">
+          <h3>Import from ACGME</h3>
+          <p>Import cases from an ACGME case log export (CSV). Cases will be marked as already submitted.</p>
+          <input type="file" id="importFile" accept=".csv" hidden>
+          <button id="importBtn" class="btn primary">Select CSV File</button>
+        </div>
+
         <div class="export-card warning-card">
           <h3>Restore Backup</h3>
           <p>Restore from a backup zip. This will replace your current database and attachments.</p>
           <input type="file" id="restoreFile" accept=".zip" hidden>
           <button id="restoreBtn" class="btn danger">Restore Backup</button>
-        </div>
-
-        <div class="export-card">
-          <h3>Import from ACGME</h3>
-          <p>Import cases from an ACGME case log export (CSV). Cases will be marked as already submitted.</p>
-          <input type="file" id="importFile" accept=".csv" hidden>
-          <button id="importBtn" class="btn secondary">Select CSV File</button>
         </div>
 
         <div id="importPreview" class="import-preview hidden">

@@ -518,6 +518,17 @@ function getCptDescription(code) {
   return CPT_DESCRIPTIONS[cleanCode] || '';
 }
 
+// Format duration in minutes to readable format (e.g., "87" -> "1h 27m")
+function formatDuration(minutes) {
+  if (!minutes || minutes === 'N/A' || minutes === 'Not found') return 'N/A';
+  const mins = parseInt(minutes, 10);
+  if (isNaN(mins) || mins <= 0) return 'N/A';
+  if (mins < 60) return `${mins}m`;
+  const h = Math.floor(mins / 60);
+  const m = mins % 60;
+  return m > 0 ? `${h}h ${m}m` : `${h}h`;
+}
+
 // --------------------------------------------
 // Loading Messages (rotating during processing)
 // --------------------------------------------
@@ -969,7 +980,7 @@ async function loadStats() {
     document.getElementById('statTotal').textContent = total;
     document.getElementById('statSubmitted').textContent = submitted;
     document.getElementById('statPending').textContent = pending;
-    document.getElementById('statAvgDuration').textContent = avgDuration;
+    document.getElementById('statAvgDuration').textContent = formatDuration(avgDuration);
 
     // By Category
     renderBreakdown('statsByCategory', groupBy(filteredCases, 'case_category'), total);
@@ -1250,7 +1261,7 @@ function renderCptBreakdown(containerId, cases) {
         <div class="breakdown-bar-fill" style="width: ${(item.count / maxCount) * 100}%"></div>
       </div>
       <span class="breakdown-value">${item.count}</span>
-      <span class="breakdown-meta">${item.avgDuration ? `${item.avgDuration}m avg` : ''}</span>
+      <span class="breakdown-meta">${item.avgDuration ? `${formatDuration(item.avgDuration)} avg` : ''}</span>
     </div>
   `}).join('');
 }
@@ -1964,6 +1975,7 @@ function renderCaseCard(c) {
               📎${c.image_count > 0 ? ` ${c.image_count}` : ''}
             </span>
           </h3>
+          <div class="case-card-subheader">${c.date_of_surgery || ''} · ${c.attending_surgeon || ''}</div>
         </div>
       </div>
       ${c.case_category ? `<div class="category-tag">${c.case_category}</div>` : ''}
@@ -1975,7 +1987,7 @@ function renderCaseCard(c) {
         <div class="meta-item"><strong>Attending:</strong> ${c.attending_surgeon || 'N/A'}</div>
         <div class="meta-item"><strong>CPT:</strong> ${c.cpt_code || 'N/A'}${(c.cpt_inferred_note || getCptDescription(c.cpt_code)) ? ` (${c.cpt_inferred_note || getCptDescription(c.cpt_code)})` : ''}</div>
         <div class="meta-item"><strong>Laterality:</strong> ${c.laterality || 'N/A'}</div>
-        <div class="meta-item"><strong>Duration:</strong> ${c.case_duration || 'N/A'}</div>
+        <div class="meta-item"><strong>Duration:</strong> ${formatDuration(c.case_duration)}</div>
         ${c.anesthesia_staff && c.anesthesia_staff !== 'Not found' ? `<div class="meta-item"><strong>Anesthesia:</strong> ${c.anesthesia_staff}</div>` : ''}
       </div>
       ${c.other_details && c.other_details.length > 0 ? `<p><strong>Notes:</strong> ${c.other_details}</p>` : ''}
@@ -2016,6 +2028,14 @@ function renderNextCasesPage() {
 
   if (slice.length > 0) {
     casesList.insertAdjacentHTML('beforeend', slice.map(renderCaseCard).join(''));
+
+    // Apply collapsed state to newly rendered cards if in collapsed mode
+    if (casesCollapsed) {
+      slice.forEach(c => {
+        const card = casesList.querySelector(`.case-card[data-id="${c.id}"]`);
+        if (card) card.classList.add('collapsed');
+      });
+    }
   }
 
   caseRenderState.offset = end;
@@ -2751,6 +2771,26 @@ function updateSelectedCount() {
       card.classList.remove('selected');
     }
   });
+}
+
+// Toggle expand/collapse all case cards
+let casesCollapsed = false;
+function toggleExpandAllCases() {
+  casesCollapsed = !casesCollapsed;
+  const btn = document.getElementById('toggleExpandBtn');
+  const cards = document.querySelectorAll('.case-card');
+
+  cards.forEach(card => {
+    if (casesCollapsed) {
+      card.classList.add('collapsed');
+    } else {
+      card.classList.remove('collapsed');
+    }
+  });
+
+  if (btn) {
+    btn.textContent = casesCollapsed ? 'Expand All' : 'Collapse All';
+  }
 }
 
 // Select all checkbox handler

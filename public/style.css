@@ -984,6 +984,26 @@ header h1::before {
   background: var(--green-50);
 }
 
+/* Collapsed case card */
+.case-card.collapsed .meta,
+.case-card.collapsed .raw-data-section,
+.case-card.collapsed .actions,
+.case-card.collapsed p,
+.case-card.collapsed .category-tag,
+.case-card.collapsed .followup-badge {
+  display: none;
+}
+
+.case-card.collapsed {
+  padding: 12px 20px;
+}
+
+.case-card-subheader {
+  font-size: 0.8rem;
+  color: var(--sage-600);
+  margin-top: 2px;
+}
+
 /* ACGME Status Badge */
 .acgme-badge {
   display: inline-flex;
@@ -1068,6 +1088,11 @@ header h1::before {
   margin-left: 0.25rem;
   font-size: 0.7rem;
   color: var(--sage-500);
+}
+
+/* Date column - prevent wrapping */
+#casesTable td:nth-child(2) {
+  white-space: nowrap;
 }
 
 /* Monthly Trends Line Graph */
@@ -1291,6 +1316,7 @@ header h1::before {
 .stats-breakdown {
   max-height: 250px;
   overflow-y: auto;
+  padding-right: 0.75rem;
 }
 
 .breakdown-row {

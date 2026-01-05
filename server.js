@@ -136,6 +136,9 @@ async function initDatabase() {
       laterality TEXT,
       case_duration TEXT,
       anesthesia_staff TEXT,
+      follow_up_note TEXT,
+      follow_up_status TEXT DEFAULT 'none',
+      follow_up_due_date TEXT,
       other_details TEXT,
       raw_extracted_text TEXT,
       image_filename TEXT,
@@ -151,7 +154,10 @@ async function initDatabase() {
     'laterality TEXT',
     'anesthesia_staff TEXT',
     'case_category TEXT',
-    'submitted_to_acgme INTEGER DEFAULT 0'
+    'submitted_to_acgme INTEGER DEFAULT 0',
+    'follow_up_note TEXT',
+    'follow_up_status TEXT DEFAULT \'none\'',
+    'follow_up_due_date TEXT'
   ];
 
   for (const col of newColumns) {
@@ -211,6 +217,30 @@ function findPathByName(rootDir, targetName, targetType = 'file') {
     }
   }
   return null;
+}
+
+// Normalize case duration to minutes (handles HH:MM, H:MM, or plain minutes)
+function normalizeDuration(duration) {
+  if (!duration || duration === 'Not found') return '';
+
+  const str = String(duration).trim();
+
+  // Already a plain number (minutes)
+  if (/^\d+$/.test(str)) {
+    return str;
+  }
+
+  // HH:MM or H:MM format
+  const match = str.match(/^(\d{1,2}):(\d{2})$/);
+  if (match) {
+    const hours = parseInt(match[1], 10);
+    const minutes = parseInt(match[2], 10);
+    return String(hours * 60 + minutes);
+  }
+
+  // Try to extract just numbers
+  const nums = str.replace(/[^\d]/g, '');
+  return nums || '';
 }
 
 // Load CPT Reference from JSON file
@@ -469,7 +499,7 @@ Respond in this EXACT JSON format (no markdown, no code blocks, just pure JSON a
     "procedure_name": "extracted or Not found",
     "case_category": "exact category from ACGME list",
     "laterality": "Right, Left, Bilateral, or N/A",
-    "case_duration": "extracted or Not found",
+    "case_duration": "in MINUTES only (convert hours to minutes, e.g. 1:30 becomes 90) or Not found",
     "anesthesia_staff": "names or Not found",
     "raw_text": "brief summary for this case"
   }
@@ -576,7 +606,7 @@ Respond in this EXACT JSON format (no markdown, no code blocks, just pure JSON a
     "procedure_name": "extracted or Not found",
     "case_category": "exact category from ACGME list",
     "laterality": "Right, Left, Bilateral, or N/A",
-    "case_duration": "extracted or Not found",
+    "case_duration": "in MINUTES only (convert hours to minutes, e.g. 1:30 becomes 90) or Not found",
     "anesthesia_staff": "names or Not found",
     "raw_text": "brief summary for this case"
   }
@@ -860,9 +890,10 @@ app.post('/api/cases', (req, res) => {
       INSERT INTO cases (
         date_of_surgery, patient_mrn, patient_age, patient_gender,
         attending_surgeon, procedure_name, cpt_code, cpt_inferred_note,
-        case_category, laterality, case_duration, anesthesia_staff, other_details,
+        case_category, laterality, case_duration, anesthesia_staff,
+        follow_up_note, follow_up_status, follow_up_due_date, other_details,
         raw_extracted_text, image_filename
-      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
     `);
 
     stmt.run([
@@ -876,8 +907,11 @@ app.post('/api/cases', (req, res) => {
       caseData.cpt_inferred_note || '',
       caseData.case_category || '',
       caseData.laterality,
-      caseData.case_duration,
+      normalizeDuration(caseData.case_duration),
       caseData.anesthesia_staff,
+      caseData.follow_up_note || '',
+      caseData.follow_up_status || 'none',
+      caseData.follow_up_due_date || '',
       caseData.other_details,
       caseData.raw_text || '',
       caseData.filename || ''
@@ -904,7 +938,7 @@ app.get('/api/cases', (req, res) => {
       FROM cases c
       LEFT JOIN case_images ci ON c.id = ci.case_id
       GROUP BY c.id
-      ORDER BY c.created_at DESC
+      ORDER BY c.date_of_surgery DESC, c.created_at DESC
     `);
 
     if (results.length === 0) {
@@ -942,7 +976,7 @@ app.get('/api/cases/search', (req, res) => {
          OR c.cpt_code LIKE '%${query}%'
          OR c.other_details LIKE '%${query}%'
       GROUP BY c.id
-      ORDER BY c.created_at DESC
+      ORDER BY c.date_of_surgery DESC, c.created_at DESC
     `);
 
     if (results.length === 0) {
@@ -1168,9 +1202,10 @@ app.post('/api/import', (req, res) => {
       INSERT INTO cases (
         date_of_surgery, patient_mrn, patient_age, patient_gender,
         attending_surgeon, procedure_name, cpt_code, cpt_inferred_note,
-        case_category, laterality, case_duration, anesthesia_staff, other_details,
-        raw_extracted_text, image_filename, submitted_to_acgme
-      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+        case_category, laterality, case_duration, anesthesia_staff,
+        follow_up_note, follow_up_status, follow_up_due_date,
+        other_details, raw_extracted_text, image_filename, submitted_to_acgme
+      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
     `);
 
     for (const c of cases) {
@@ -1200,8 +1235,11 @@ app.post('/api/import', (req, res) => {
           c.cpt_inferred_note || '',
           c.case_category || '',
           c.laterality || 'N/A',
-          c.case_duration || '',
+          normalizeDuration(c.case_duration),
           c.anesthesia_staff || '',
+          c.follow_up_note || '',
+          c.follow_up_status || 'none',
+          c.follow_up_due_date || '',
           c.other_details || '',
           c.raw_extracted_text || 'Imported from ACGME',
           c.image_filename || '',
@@ -1337,6 +1375,9 @@ app.put('/api/cases/:id', (req, res) => {
         laterality = ?,
         case_duration = ?,
         anesthesia_staff = ?,
+        follow_up_note = ?,
+        follow_up_status = ?,
+        follow_up_due_date = ?,
         other_details = ?
       WHERE id = ?
     `, [
@@ -1350,8 +1391,11 @@ app.put('/api/cases/:id', (req, res) => {
       caseData.cpt_inferred_note || '',
       caseData.case_category || '',
       caseData.laterality,
-      caseData.case_duration,
+      normalizeDuration(caseData.case_duration),
       caseData.anesthesia_staff,
+      caseData.follow_up_note || '',
+      caseData.follow_up_status || 'none',
+      caseData.follow_up_due_date || '',
       caseData.other_details,
       id
     ]);
@@ -1363,6 +1407,33 @@ app.put('/api/cases/:id', (req, res) => {
   } catch (error) {
     console.error('❌ Error updating case:', error);
     res.status(500).json({ error: 'Failed to update case' });
+  }
+});
+
+// Route: Update follow-up fields only
+app.patch('/api/cases/:id/follow-up', (req, res) => {
+  try {
+    const id = req.params.id;
+    const { follow_up_note, follow_up_status, follow_up_due_date } = req.body || {};
+
+    db.run(`
+      UPDATE cases SET
+        follow_up_note = ?,
+        follow_up_status = ?,
+        follow_up_due_date = ?
+      WHERE id = ?
+    `, [
+      follow_up_note || '',
+      follow_up_status || 'none',
+      follow_up_due_date || '',
+      id
+    ]);
+
+    saveDatabase();
+    res.json({ success: true });
+  } catch (error) {
+    console.error('❌ Error updating follow-up:', error);
+    res.status(500).json({ error: 'Failed to update follow-up' });
   }
 });
 
