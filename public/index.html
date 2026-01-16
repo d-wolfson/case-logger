@@ -21,6 +21,7 @@
       <button class="tab" data-tab="followup">
         Follow-Up <span class="tab-badge hidden" id="followupBadge">0</span>
       </button>
+      <button class="tab" data-tab="acgme-queue">ACGME Queue</button>
       <button class="tab" data-tab="stats">Stats</button>
       <button class="tab" data-tab="export">Export/Import</button>
     </nav>
@@ -29,9 +30,10 @@
     <section id="upload" class="tab-content active">
       <div class="upload-area" id="dropZone">
         <div class="upload-icon">📷</div>
-        <p>Drag & drop images here</p>
+        <p>Drag & drop or paste images here</p>
         <p class="small">Upload one or many cases - auto-detects and groups them</p>
         <p class="small">(Epic screenshots, OR schedules, case cards, etc.)</p>
+        <p class="small paste-hint">⌘V to paste from clipboard</p>
         <input type="file" id="fileInput" accept="image/*" multiple hidden>
       </div>
 
@@ -179,6 +181,13 @@
           <div id="duplicateWarning" class="inline-warning hidden">
             <span id="duplicateWarningText"></span>
             <button type="button" class="btn-link" id="duplicateOpenBtn">Open existing</button>
+          </div>
+
+          <div class="form-row">
+            <label class="inline-check">
+              <input type="checkbox" id="addToAcgmeQueue" name="add_to_acgme_queue" checked>
+              Add to ACGME queue after save
+            </label>
           </div>
 
           <div class="button-group">
@@ -356,6 +365,20 @@
         </div>
         <div id="tableSentinel" class="scroll-sentinel hidden">Loading more...</div>
       </div>
+    </section>
+
+    <!-- ACGME Queue Tab -->
+    <section id="acgme-queue" class="tab-content">
+      <div class="queue-header">
+        <h2>ACGME Submission Queue</h2>
+        <div class="queue-actions">
+          <button class="btn secondary" id="refreshQueueBtn">Refresh</button>
+          <button class="btn danger" id="clearQueueBtn2">Clear All</button>
+        </div>
+      </div>
+      <p class="info">Reorder by dragging, or remove individual cases.</p>
+      <div id="acgmeQueueList" class="queue-list"></div>
+      <p id="acgmeQueueEmpty" class="small hidden">Queue is empty.</p>
     </section>
 
     <!-- Follow-Up Tab -->

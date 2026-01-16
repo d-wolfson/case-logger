@@ -917,11 +917,14 @@ app.post('/api/cases', (req, res) => {
       caseData.filename || ''
     ]);
 
+    const result = db.exec(`SELECT last_insert_rowid() as id`);
+    const caseId = result[0].values[0][0];
+
     stmt.free();
     saveDatabase();
 
     console.log('💾 Case saved to database');
-    res.json({ success: true, message: 'Case saved successfully' });
+    res.json({ success: true, message: 'Case saved successfully', id: caseId });
 
   } catch (error) {
     console.error('❌ Error saving case:', error);
@@ -1006,7 +1009,11 @@ const ACGME_QUEUE_FILE = path.join(__dirname, 'acgme-queue.json');
 function loadAcgmeQueue() {
   try {
     if (fs.existsSync(ACGME_QUEUE_FILE)) {
-      return JSON.parse(fs.readFileSync(ACGME_QUEUE_FILE, 'utf8'));
+      const raw = JSON.parse(fs.readFileSync(ACGME_QUEUE_FILE, 'utf8'));
+      const normalized = raw
+        .map(id => Number(id))
+        .filter(id => !Number.isNaN(id));
+      return Array.from(new Set(normalized));
     }
   } catch (e) {}
   return [];
@@ -1025,7 +1032,8 @@ app.post('/api/acgme-queue', (req, res) => {
     }
 
     const queue = loadAcgmeQueue();
-    const newIds = caseIds.filter(id => !queue.includes(id));
+    const normalized = caseIds.map(id => Number(id)).filter(id => !Number.isNaN(id));
+    const newIds = normalized.filter(id => !queue.includes(id));
     queue.push(...newIds);
     saveAcgmeQueue(queue);
 
@@ -1034,6 +1042,31 @@ app.post('/api/acgme-queue', (req, res) => {
   } catch (error) {
     console.error('Error adding to queue:', error);
     res.status(500).json({ error: 'Failed to add to queue' });
+  }
+});
+
+// Route: Reorder ACGME submission queue
+app.put('/api/acgme-queue', (req, res) => {
+  try {
+    const { caseIds } = req.body;
+    if (!caseIds || !Array.isArray(caseIds)) {
+      return res.status(400).json({ error: 'caseIds array required' });
+    }
+
+    const queue = loadAcgmeQueue();
+    const normalized = caseIds.map(id => Number(id)).filter(id => !Number.isNaN(id));
+    const unique = Array.from(new Set(normalized));
+    const missing = queue.filter(id => !unique.includes(id));
+
+    if (missing.length > 0 || unique.length !== queue.length) {
+      return res.status(400).json({ error: 'caseIds must match existing queue' });
+    }
+
+    saveAcgmeQueue(unique);
+    res.json({ success: true, queueLength: unique.length });
+  } catch (error) {
+    console.error('Error reordering queue:', error);
+    res.status(500).json({ error: 'Failed to reorder queue' });
   }
 });
 
@@ -1443,6 +1476,12 @@ app.delete('/api/cases/:id', (req, res) => {
     const id = req.params.id;
     db.run(`DELETE FROM cases WHERE id = ?`, [id]);
     saveDatabase();
+    const queue = loadAcgmeQueue();
+    const normalizedId = Number(id);
+    const newQueue = queue.filter(caseId => caseId !== normalizedId);
+    if (newQueue.length !== queue.length) {
+      saveAcgmeQueue(newQueue);
+    }
     res.json({ success: true, message: 'Case deleted' });
   } catch (error) {
     console.error('❌ Error deleting case:', error);

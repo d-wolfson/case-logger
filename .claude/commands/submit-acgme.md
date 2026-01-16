@@ -56,6 +56,7 @@ Use browser automation tools in this order:
    - Type the attending's last name (extract from `attending_surgeon`)
    - Wait for search results
    - Click on the matching result
+   - **If attending not found**: Select "Other Attending" from the dropdown instead
 
 9. **Patient Type**: Set based on age
    - If `patient_age` >= 18 or unknown: "Adult"
@@ -77,6 +78,7 @@ Use browser automation tools in this order:
 12. **Submit the case**:
     - Click the "Submit" button (green button at top right)
     - Wait for confirmation
+    - **Auto-submit**: Do not ask for user confirmation before submitting - always submit automatically
 
 ### Step 3: Mark Case as Submitted
 

@@ -60,9 +60,8 @@
 
 ## Known Issues / Notes
 
-1. **Slash command `/submit-acgme` doesn't work** - Use "process ACGME queue" instead
-2. **Server must be manually restarted** after code changes (no hot reload)
-3. **Existing imported data** - Re-import needed to fix old vascular categories or get CPT descriptions
+1. **Server must be manually restarted** after code changes (no hot reload)
+2. **Existing imported data** - Re-import needed to fix old vascular categories or get CPT descriptions
 
 ---
 

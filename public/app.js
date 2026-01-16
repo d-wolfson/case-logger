@@ -598,6 +598,10 @@ document.querySelectorAll('.tab').forEach(tab => {
     if (tab.dataset.tab === 'followup') {
       loadFollowUpQueue();
     }
+    // Load ACGME queue
+    if (tab.dataset.tab === 'acgme-queue') {
+      loadAcgmeQueue();
+    }
     // Load stats when switching to stats tab
     if (tab.dataset.tab === 'stats') {
       loadStats();
@@ -1103,14 +1107,28 @@ function renderMonthlyTrends(containerId, cases) {
     }
   });
 
-  // Sort by month (entire residency)
-  const sortedMonths = Object.entries(monthlyData)
-    .sort((a, b) => a[0].localeCompare(b[0]));
-
-  if (sortedMonths.length === 0) {
+  // Get last month with data
+  const monthsWithData = Object.keys(monthlyData).sort();
+  if (monthsWithData.length === 0) {
     container.innerHTML = '<p style="color: #666; text-align: center;">No data</p>';
     return;
   }
+
+  // Generate all months from PGY-1 start (July 2020) to last month with data
+  const generateAllMonths = (start, end) => {
+    const months = [];
+    let [year, month] = start.split('-').map(Number);
+    const [endYear, endMonth] = end.split('-').map(Number);
+    while (year < endYear || (year === endYear && month <= endMonth)) {
+      const key = `${year}-${String(month).padStart(2, '0')}`;
+      months.push([key, monthlyData[key] || 0]);
+      month++;
+      if (month > 12) { month = 1; year++; }
+    }
+    return months;
+  };
+
+  const sortedMonths = generateAllMonths('2020-07', monthsWithData[monthsWithData.length - 1]);
 
   const maxCount = Math.max(...sortedMonths.map(m => m[1]));
   const minCount = 0;
@@ -1141,18 +1159,48 @@ function renderMonthlyTrends(containerId, cases) {
   // Create area path (filled below line)
   const areaPath = `${linePath} L ${points[points.length - 1].x} ${padding.top + graphHeight} L ${padding.left} ${padding.top + graphHeight} Z`;
 
-  // X-axis labels - show Jan of each year plus first/last
-  const yearStarts = points.filter((p, i) => {
-    const month = p.month.split('-')[1];
-    return month === '01' || i === 0 || i === points.length - 1;
-  });
-  // Limit to reasonable number of labels
-  const xLabels = yearStarts.length > 8
-    ? yearStarts.filter((_, i) => i % 2 === 0 || i === yearStarts.length - 1)
-    : yearStarts;
+  // X-axis labels - show July of each year (PGY boundaries)
+  const xLabels = points.filter(p => p.month.split('-')[1] === '07');
 
   // Y-axis labels - nice round numbers
   const yLabels = [0, Math.round(maxCount / 2), maxCount];
+
+  // PGY year markers - July of each year starting from PGY-1 in July 2020
+  // Calculate x position for any month based on interpolation
+  const pgyStartYear = 2020;
+  const firstMonth = sortedMonths[0][0];
+  const lastMonth = sortedMonths[sortedMonths.length - 1][0];
+
+  const monthToNum = (yyyymm) => {
+    const [y, m] = yyyymm.split('-').map(Number);
+    return y * 12 + m;
+  };
+  const firstMonthNum = monthToNum(firstMonth);
+  const lastMonthNum = monthToNum(lastMonth);
+  const totalMonths = lastMonthNum - firstMonthNum;
+
+  const getXForMonth = (yyyymm) => {
+    const monthNum = monthToNum(yyyymm);
+    const ratio = totalMonths > 0 ? (monthNum - firstMonthNum) / totalMonths : 0;
+    return padding.left + ratio * graphWidth;
+  };
+
+  // Find all PGY boundaries (July of each year) within the data range
+  const pgyBoundaries = [];
+  for (let year = pgyStartYear; year <= 2030; year++) {
+    const julyMonth = `${year}-07`;
+    if (monthToNum(julyMonth) >= firstMonthNum && monthToNum(julyMonth) <= lastMonthNum) {
+      const pgyYear = year - pgyStartYear + 1;
+      pgyBoundaries.push({ x: getXForMonth(julyMonth), pgyYear, month: julyMonth });
+    }
+  }
+
+  // Calculate label positions (centered between boundaries)
+  const pgyLabels = pgyBoundaries.map((boundary, i) => {
+    const nextX = i < pgyBoundaries.length - 1 ? pgyBoundaries[i + 1].x : width - padding.right;
+    const labelX = (boundary.x + nextX) / 2;
+    return { x: labelX, pgyYear: boundary.pgyYear };
+  });
 
   container.innerHTML = `
     <svg viewBox="0 0 ${width} ${height}" class="trends-chart">
@@ -1161,6 +1209,18 @@ function renderMonthlyTrends(containerId, cases) {
         const y = padding.top + graphHeight - ((val - minCount) / (maxCount - minCount || 1)) * graphHeight;
         return `<line x1="${padding.left}" y1="${y}" x2="${width - padding.right}" y2="${y}" stroke="#e5e7eb" stroke-width="1"/>`;
       }).join('')}
+
+      <!-- PGY year boundary lines -->
+      ${pgyBoundaries.map(m => `
+        <line x1="${m.x}" y1="0" x2="${m.x}" y2="${padding.top + graphHeight}"
+              stroke="#9ca3af" stroke-width="1" stroke-dasharray="4,3" opacity="0.4"/>
+      `).join('')}
+
+      <!-- PGY year labels (centered between boundaries) -->
+      ${pgyLabels.map(l => `
+        <text x="${l.x}" y="10" text-anchor="middle" font-size="9" fill="#9ca3af"
+              font-family="system-ui, sans-serif" font-weight="500">PGY-${l.pgyYear}</text>
+      `).join('')}
 
       <!-- Area fill -->
       <path d="${areaPath}" fill="var(--green-100)" opacity="0.6"/>
@@ -1385,6 +1445,33 @@ dropZone.addEventListener('drop', (e) => {
   }
 });
 
+// Paste event for clipboard images
+document.addEventListener('paste', (e) => {
+  // Only handle paste when on Upload tab and dropZone is visible
+  const uploadTab = document.getElementById('upload');
+  if (!uploadTab.classList.contains('active') || dropZone.classList.contains('hidden')) {
+    return;
+  }
+
+  const items = e.clipboardData?.items;
+  if (!items) return;
+
+  const imageFiles = [];
+  for (const item of items) {
+    if (item.type.startsWith('image/')) {
+      const file = item.getAsFile();
+      if (file) {
+        imageFiles.push(file);
+      }
+    }
+  }
+
+  if (imageFiles.length > 0) {
+    e.preventDefault();
+    handleFiles(imageFiles);
+  }
+});
+
 // Process uploaded files (supports multiple images, auto-detects single vs batch)
 async function handleFiles(files) {
   // Filter to only image files
@@ -1552,7 +1639,8 @@ function populateForm(data, filename, imageCount = 1) {
   const categorySelect = document.getElementById('case_category');
   const categoryHint = document.getElementById('categoryHint');
   if (data.case_category) {
-    categorySelect.value = data.case_category;
+    const matchedCategory = getMatchedCategoryValue(data.case_category, categorySelect);
+    categorySelect.value = matchedCategory;
     categoryHint.textContent = 'Detected: ' + data.case_category;
   } else {
     categorySelect.value = '';
@@ -1577,6 +1665,45 @@ function populateForm(data, filename, imageCount = 1) {
   }
 }
 
+function normalizeCategoryLabel(label) {
+  if (!label) return '';
+  let cleaned = label.replace(/\s*\(.*?\)\s*$/g, '').trim();
+  cleaned = cleaned.replace(/\u00a0/g, ' ');
+  cleaned = cleaned.replace(/\s+/g, ' ').trim();
+  return mapAcgmeCategory(cleaned);
+}
+
+function normalizeCategoryForMatch(label) {
+  if (!label) return '';
+  return label
+    .toLowerCase()
+    .replace(/\u00a0/g, ' ')
+    .replace(/\(.*?\)/g, '')
+    .replace(/[^a-z0-9:/ ]+/g, ' ')
+    .replace(/\s+/g, ' ')
+    .trim();
+}
+
+function getMatchedCategoryValue(rawValue, selectEl) {
+  if (!rawValue || !selectEl) return '';
+  const cleaned = normalizeCategoryLabel(rawValue);
+  if (!cleaned) return '';
+  const options = Array.from(selectEl.options)
+    .map(opt => opt.value)
+    .filter(Boolean);
+
+  const normalizedTarget = normalizeCategoryForMatch(cleaned);
+  if (!normalizedTarget) return '';
+
+  const exact = options.find(opt => normalizeCategoryForMatch(opt) === normalizedTarget);
+  if (exact) return exact;
+
+  const includes = options.find(opt => normalizedTarget.includes(normalizeCategoryForMatch(opt)));
+  if (includes) return includes;
+
+  return '';
+}
+
 // --------------------------------------------
 // Form Handling
 // --------------------------------------------
@@ -1591,6 +1718,24 @@ function resetDuplicateWarning() {
   duplicateCaseId = null;
   if (duplicateWarning) duplicateWarning.classList.add('hidden');
   if (duplicateWarningText) duplicateWarningText.textContent = '';
+}
+
+async function addCaseToAcgmeQueue(caseId) {
+  try {
+    const response = await fetch('/api/acgme-queue', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ caseIds: [caseId] })
+    });
+    const result = await response.json();
+    if (!result.success) {
+      throw new Error(result.error || 'Failed to add to queue');
+    }
+    return true;
+  } catch (error) {
+    console.error('Queue error:', error);
+    return false;
+  }
 }
 
 // Save or update case
@@ -1617,6 +1762,7 @@ caseForm.addEventListener('submit', async (e) => {
     raw_text: document.getElementById('raw_text').value,
     filename: document.getElementById('filename').value
   };
+  const addToQueue = document.getElementById('addToAcgmeQueue').checked;
 
   try {
     // Check for duplicates before saving
@@ -1665,6 +1811,19 @@ caseForm.addEventListener('submit', async (e) => {
     const result = await response.json();
 
     if (result.success) {
+      if (addToQueue) {
+        const queuedId = editingCaseId || result.id;
+        if (queuedId) {
+          const queued = await addCaseToAcgmeQueue(queuedId);
+          if (queued) {
+            successMessage += ' Added to ACGME queue.';
+          } else {
+            alert('Saved, but failed to add to ACGME queue. You can add it from My Cases.');
+          }
+        } else {
+          alert('Saved, but missing case ID for ACGME queue.');
+        }
+      }
       alert(successMessage);
       resetUploadArea();
       updateFollowUpBadge();
@@ -2190,6 +2349,163 @@ followupFilterStatus?.addEventListener('change', () => {
   loadFollowUpQueue();
 });
 
+// --------------------------------------------
+// ACGME Queue
+// --------------------------------------------
+const acgmeQueueList = document.getElementById('acgmeQueueList');
+const acgmeQueueEmpty = document.getElementById('acgmeQueueEmpty');
+const refreshQueueBtn = document.getElementById('refreshQueueBtn');
+const clearQueueBtn2 = document.getElementById('clearQueueBtn2');
+
+function formatQueueMeta(c) {
+  const date = c.date_of_surgery || 'N/A';
+  const mrn = c.patient_mrn || 'N/A';
+  const attending = c.attending_surgeon || 'N/A';
+  const cpt = c.cpt_code || 'N/A';
+  return `${date} | MRN ${mrn} | ${attending} | CPT ${cpt}`;
+}
+
+function renderAcgmeQueue(queue, cases) {
+  if (!acgmeQueueList || !acgmeQueueEmpty) return;
+  const caseMap = new Map(cases.map(c => [Number(c.id), c]));
+
+  if (queue.length === 0) {
+    acgmeQueueList.innerHTML = '';
+    acgmeQueueEmpty.classList.remove('hidden');
+    return;
+  }
+
+  acgmeQueueEmpty.classList.add('hidden');
+  acgmeQueueList.innerHTML = queue.map(id => {
+    const c = caseMap.get(Number(id));
+    const title = c?.procedure_name || 'Unknown Procedure';
+    const meta = c ? formatQueueMeta(c) : 'Case not found';
+    return `
+      <div class="queue-item" draggable="true" data-id="${id}">
+        <div class="queue-handle" title="Drag to reorder">⋮⋮</div>
+        <div class="queue-details">
+          <div class="queue-title">${escapeHtml(title)}</div>
+          <div class="queue-meta">${escapeHtml(meta)}</div>
+        </div>
+        <div class="queue-item-actions">
+          <button class="btn secondary" data-action="remove" data-id="${id}">Remove</button>
+        </div>
+      </div>
+    `;
+  }).join('');
+
+  if (!acgmeQueueList.dataset.dragInit) {
+    acgmeQueueList.addEventListener('dragover', (e) => {
+      e.preventDefault();
+      const after = getQueueDragAfterElement(acgmeQueueList, e.clientY);
+      const dragging = document.querySelector('.queue-item.dragging');
+      if (!dragging) return;
+      if (after == null) {
+        acgmeQueueList.appendChild(dragging);
+      } else {
+        acgmeQueueList.insertBefore(dragging, after);
+      }
+    });
+    acgmeQueueList.dataset.dragInit = 'true';
+  }
+
+  acgmeQueueList.querySelectorAll('.queue-item').forEach(item => {
+    item.addEventListener('dragstart', () => {
+      item.classList.add('dragging');
+    });
+    item.addEventListener('dragend', async () => {
+      item.classList.remove('dragging');
+      await saveAcgmeQueueOrder();
+    });
+  });
+
+  acgmeQueueList.querySelectorAll('[data-action="remove"]').forEach(btn => {
+    btn.addEventListener('click', async () => {
+      const caseId = btn.dataset.id;
+      await removeFromAcgmeQueue(caseId);
+    });
+  });
+}
+
+function getQueueDragAfterElement(container, y) {
+  const draggableElements = [...container.querySelectorAll('.queue-item:not(.dragging)')];
+  return draggableElements.reduce((closest, child) => {
+    const box = child.getBoundingClientRect();
+    const offset = y - box.top - box.height / 2;
+    if (offset < 0 && offset > closest.offset) {
+      return { offset, element: child };
+    }
+    return closest;
+  }, { offset: Number.NEGATIVE_INFINITY, element: null }).element;
+}
+
+async function loadAcgmeQueue() {
+  try {
+    const response = await fetch('/api/acgme-queue');
+    const data = await response.json();
+    renderAcgmeQueue(data.queue || [], data.cases || []);
+  } catch (error) {
+    console.error('Error loading ACGME queue:', error);
+    if (acgmeQueueList) {
+      acgmeQueueList.innerHTML = '<p class="error">Error loading queue</p>';
+    }
+  }
+}
+
+async function saveAcgmeQueueOrder() {
+  const ids = Array.from(acgmeQueueList.querySelectorAll('.queue-item')).map(item => item.dataset.id);
+  try {
+    const response = await fetch('/api/acgme-queue', {
+      method: 'PUT',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ caseIds: ids })
+    });
+    const result = await response.json();
+    if (!result.success) {
+      throw new Error(result.error || 'Failed to reorder queue');
+    }
+  } catch (error) {
+    alert('Error reordering queue: ' + error.message);
+  }
+}
+
+async function removeFromAcgmeQueue(caseId) {
+  try {
+    const response = await fetch('/api/acgme-queue', {
+      method: 'DELETE',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ caseIds: [Number(caseId)] })
+    });
+    const result = await response.json();
+    if (!result.success && !result.cleared) {
+      throw new Error(result.error || 'Failed to remove from queue');
+    }
+    loadAcgmeQueue();
+  } catch (error) {
+    alert('Error removing from queue: ' + error.message);
+  }
+}
+
+refreshQueueBtn?.addEventListener('click', () => {
+  loadAcgmeQueue();
+});
+
+clearQueueBtn2?.addEventListener('click', async () => {
+  if (!confirm('Clear the entire ACGME queue?')) {
+    return;
+  }
+  try {
+    const response = await fetch('/api/acgme-queue', { method: 'DELETE' });
+    const result = await response.json();
+    if (!result.success) {
+      throw new Error(result.error || 'Failed to clear queue');
+    }
+    loadAcgmeQueue();
+  } catch (error) {
+    alert('Error clearing queue: ' + error.message);
+  }
+});
+
 async function markFollowUpDone(caseId) {
   try {
     const response = await fetch(`/api/cases/${caseId}/follow-up`, {
@@ -2506,7 +2822,7 @@ function displayBatchReviewQueue() {
   `;
 
   batchCasesList.innerHTML = batchCases.map(c => `
-    <div class="batch-case-card" data-case-id="${c.id}">
+    <div class="batch-case-card" data-case-id="${c.id}" data-raw-category="${escapeHtml(c.data.case_category || '')}">
       <div class="batch-case-header" onclick="toggleBatchCase(${c.id})">
         <div>
           <h3>${c.data.procedure_name || 'Unknown Procedure'}</h3>
@@ -2553,7 +2869,7 @@ function displayBatchReviewQueue() {
         </div>
         <div class="form-group">
           <label>Category</label>
-          <select data-field="case_category">${categoryOptions.replace(`value="${c.data.case_category}"`, `value="${c.data.case_category}" selected`)}</select>
+          <select data-field="case_category">${categoryOptions}</select>
         </div>
         <div class="form-row">
           <div class="form-group">
@@ -2597,12 +2913,26 @@ function displayBatchReviewQueue() {
             <input type="date" data-field="follow_up_due_date" value="${c.data.follow_up_due_date || ''}">
           </div>
         </div>
+        <div class="form-row">
+          <label class="inline-check">
+            <input type="checkbox" class="batch-acgme-checkbox" checked>
+            Add to ACGME queue after save
+          </label>
+        </div>
         <div class="batch-case-actions">
           <button class="btn danger" onclick="removeBatchCase(${c.id})">Remove Case</button>
         </div>
       </div>
     </div>
   `).join('');
+
+  batchCasesList.querySelectorAll('.batch-case-card').forEach(card => {
+    const rawCategory = card.dataset.rawCategory || '';
+    const select = card.querySelector('[data-field="case_category"]');
+    if (select) {
+      select.value = getMatchedCategoryValue(rawCategory, select);
+    }
+  });
 }
 
 // Helper to escape HTML
@@ -2657,7 +2987,8 @@ document.getElementById('saveAllCasesBtn').addEventListener('click', async () =>
       follow_up_status: card.querySelector('[data-field="follow_up_status"]').value,
       follow_up_due_date: card.querySelector('[data-field="follow_up_due_date"]').value,
       raw_text: batchCase.data.raw_text || '',
-      filename: batchCase.images.join(', ')
+      filename: batchCase.images.join(', '),
+      _batchId: batchCase.id
     };
 
     casesToSave.push(caseData);
@@ -2699,9 +3030,17 @@ document.getElementById('saveAllCasesBtn').addEventListener('click', async () =>
   // Save each case
   let savedCount = 0;
   let errorCount = 0;
+  let queueRequestedCount = 0;
+  let queuedCount = 0;
+  let queueErrorCount = 0;
 
   for (const caseData of casesToSave) {
     try {
+      const card = document.querySelector(`.batch-case-card[data-case-id="${caseData._batchId}"]`);
+      const addToQueue = card ? card.querySelector('.batch-acgme-checkbox')?.checked : false;
+      if (addToQueue) {
+        queueRequestedCount++;
+      }
       const response = await fetch('/api/cases', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
@@ -2711,6 +3050,16 @@ document.getElementById('saveAllCasesBtn').addEventListener('click', async () =>
       const result = await response.json();
       if (result.success) {
         savedCount++;
+        if (addToQueue && result.id) {
+          const queued = await addCaseToAcgmeQueue(result.id);
+          if (queued) {
+            queuedCount++;
+          } else {
+            queueErrorCount++;
+          }
+        } else if (addToQueue) {
+          queueErrorCount++;
+        }
       } else {
         errorCount++;
       }
@@ -2720,10 +3069,24 @@ document.getElementById('saveAllCasesBtn').addEventListener('click', async () =>
   }
 
   if (errorCount === 0) {
-    alert(`Successfully saved ${savedCount} case${savedCount > 1 ? 's' : ''}!`);
+    let message = `Successfully saved ${savedCount} case${savedCount > 1 ? 's' : ''}!`;
+    if (queueRequestedCount > 0) {
+      message += ` Added ${queuedCount} to ACGME queue.`;
+      if (queueErrorCount > 0) {
+        message += ` ${queueErrorCount} failed to queue.`;
+      }
+    }
+    alert(message);
     resetBatchUI();
   } else {
-    alert(`Saved ${savedCount} cases. ${errorCount} failed to save.`);
+    let message = `Saved ${savedCount} cases. ${errorCount} failed to save.`;
+    if (queueRequestedCount > 0) {
+      message += ` Added ${queuedCount} to ACGME queue.`;
+      if (queueErrorCount > 0) {
+        message += ` ${queueErrorCount} failed to queue.`;
+      }
+    }
+    alert(message);
   }
 });
 
@@ -2951,6 +3314,22 @@ document.getElementById('cpt_code')?.addEventListener('input', () => {
 // --------------------------------------------
 let currentAttachmentCaseId = null;
 
+function updateAttachmentBadges(caseId, imageCount) {
+  const tableBadge = document.querySelector(`tr[data-id="${caseId}"] .img-badge`);
+  if (tableBadge) {
+    tableBadge.classList.toggle('has-images', imageCount > 0);
+    tableBadge.classList.toggle('no-images', imageCount === 0);
+    tableBadge.textContent = imageCount > 0 ? `📎${imageCount}` : '+';
+    tableBadge.title = imageCount > 0 ? 'View/add attachments' : 'Add attachments';
+  }
+
+  const cardBadge = document.getElementById(`attach-badge-${caseId}`);
+  if (cardBadge) {
+    cardBadge.classList.toggle('has-images', imageCount > 0);
+    cardBadge.textContent = `📎${imageCount > 0 ? ` ${imageCount}` : ''}`;
+  }
+}
+
 // Open attachment modal for a case
 async function openAttachmentModal(caseId) {
   currentAttachmentCaseId = caseId;
@@ -2972,6 +3351,7 @@ async function openAttachmentModal(caseId) {
 
     const images = result.images || [];
     countSpan.textContent = `(${images.length})`;
+    updateAttachmentBadges(caseId, images.length);
 
     if (images.length === 0) {
       grid.innerHTML = '<p class="empty-attachments">No attachments yet. Click "+ Add Images" to attach imaging.</p>';
