@@ -101,6 +101,7 @@ header h1::before {
   flex: 1;
   padding: 11px 16px;
   border: none;
+  white-space: nowrap;
   background: transparent;
   font-size: 0.9rem;
   font-weight: 500;
