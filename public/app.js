@@ -612,6 +612,7 @@ document.querySelectorAll('.tab').forEach(tab => {
 });
 
 updateFollowUpBadge();
+updateAcgmeQueueBadge();
 
 // Table sorting state
 let tableSortField = 'date_of_surgery';
@@ -1247,7 +1248,15 @@ function renderMonthlyTrends(containerId, cases) {
     </svg>
     <div class="trends-summary">
       <span>Total: ${cases.length} cases</span>
-      <span>Avg: ${Math.round(cases.length / sortedMonths.length)}/mo</span>
+      <span>Avg: ${(() => {
+        // Exclude PGY-4 research year (July 2023 – June 2024) from average
+        const clinicalMonths = sortedMonths.filter(([m]) => m < '2023-07' || m > '2024-06');
+        const clinicalCases = clinicalMonths.reduce((sum, [, count]) => sum + count, 0);
+        return clinicalMonths.length > 0 ? Math.round(clinicalCases / clinicalMonths.length) : 0;
+      })()}/mo*</span>
+    </div>
+    <div style="font-size: 0.75rem; color: var(--sage-500); text-align: right; margin-top: 0.25rem;">
+      *Excludes PGY-4 research year (Jul 2023 – Jun 2024)
     </div>
   `;
 }
@@ -1720,6 +1729,18 @@ function resetDuplicateWarning() {
   if (duplicateWarningText) duplicateWarningText.textContent = '';
 }
 
+function getMissingAcgmeFields(data) {
+  const isNotFound = v => !v || String(v).trim() === '' || String(v).trim().toLowerCase() === 'not found';
+  const missing = [];
+  if (isNotFound(data.patient_mrn))       missing.push('MRN');
+  if (isNotFound(data.date_of_surgery))   missing.push('Date');
+  if (isNotFound(data.patient_age))       missing.push('Age');
+  if (isNotFound(data.patient_gender))    missing.push('Sex');
+  if (isNotFound(data.attending_surgeon)) missing.push('Attending');
+  if (isNotFound(data.cpt_code))          missing.push('CPT');
+  return missing;
+}
+
 async function addCaseToAcgmeQueue(caseId) {
   try {
     const response = await fetch('/api/acgme-queue', {
@@ -1812,21 +1833,27 @@ caseForm.addEventListener('submit', async (e) => {
 
     if (result.success) {
       if (addToQueue) {
-        const queuedId = editingCaseId || result.id;
-        if (queuedId) {
-          const queued = await addCaseToAcgmeQueue(queuedId);
-          if (queued) {
-            successMessage += ' Added to ACGME queue.';
-          } else {
-            alert('Saved, but failed to add to ACGME queue. You can add it from My Cases.');
-          }
+        const missingFields = getMissingAcgmeFields(formData);
+        if (missingFields.length > 0) {
+          alert(`Case saved, but NOT added to ACGME queue.\n\nMissing required fields: ${missingFields.join(', ')}\n\nFix these fields and re-queue from My Cases.`);
         } else {
-          alert('Saved, but missing case ID for ACGME queue.');
+          const queuedId = editingCaseId || result.id;
+          if (queuedId) {
+            const queued = await addCaseToAcgmeQueue(queuedId);
+            if (queued) {
+              successMessage += ' Added to ACGME queue.';
+            } else {
+              alert('Saved, but failed to add to ACGME queue. You can add it from My Cases.');
+            }
+          } else {
+            alert('Saved, but missing case ID for ACGME queue.');
+          }
         }
       }
       alert(successMessage);
       resetUploadArea();
       updateFollowUpBadge();
+      updateAcgmeQueueBadge();
     } else {
       throw new Error(result.error);
     }
@@ -1872,11 +1899,27 @@ async function updateFollowUpBadge() {
   const badge = document.getElementById('followupBadge');
   if (!badge) return;
   try {
-    const response = await fetch('/api/cases');
-    const cases = await response.json();
-    const dueCount = cases.filter(c => isFollowUpDue(c)).length;
-    if (dueCount > 0) {
-      badge.textContent = String(dueCount);
+    const response = await fetch('/api/followup-count');
+    const data = await response.json();
+    if (data.count > 0) {
+      badge.textContent = String(data.count);
+      badge.classList.remove('hidden');
+    } else {
+      badge.classList.add('hidden');
+    }
+  } catch (error) {
+    badge.classList.add('hidden');
+  }
+}
+
+async function updateAcgmeQueueBadge() {
+  const badge = document.getElementById('acgmeQueueBadge');
+  if (!badge) return;
+  try {
+    const response = await fetch('/api/acgme-queue-count');
+    const data = await response.json();
+    if (data.count > 0) {
+      badge.textContent = String(data.count);
       badge.classList.remove('hidden');
     } else {
       badge.classList.add('hidden');
@@ -2369,6 +2412,17 @@ function renderAcgmeQueue(queue, cases) {
   if (!acgmeQueueList || !acgmeQueueEmpty) return;
   const caseMap = new Map(cases.map(c => [Number(c.id), c]));
 
+  // Update tab badge
+  const badge = document.getElementById('acgmeQueueBadge');
+  if (badge) {
+    if (queue.length > 0) {
+      badge.textContent = queue.length;
+      badge.classList.remove('hidden');
+    } else {
+      badge.classList.add('hidden');
+    }
+  }
+
   if (queue.length === 0) {
     acgmeQueueList.innerHTML = '';
     acgmeQueueEmpty.classList.remove('hidden');
@@ -2471,16 +2525,14 @@ async function saveAcgmeQueueOrder() {
 
 async function removeFromAcgmeQueue(caseId) {
   try {
-    const response = await fetch('/api/acgme-queue', {
-      method: 'DELETE',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ caseIds: [Number(caseId)] })
-    });
-    const result = await response.json();
-    if (!result.success && !result.cleared) {
-      throw new Error(result.error || 'Failed to remove from queue');
+    // Mark the case as submitted when manually removing from queue
+    const markResponse = await fetch(`/api/cases/${caseId}/mark-submitted`, { method: 'POST' });
+    const markResult = await markResponse.json();
+    if (!markResult.success) {
+      throw new Error(markResult.error || 'Failed to mark as submitted');
     }
     loadAcgmeQueue();
+    updateAcgmeQueueBadge();
   } catch (error) {
     alert('Error removing from queue: ' + error.message);
   }
@@ -3051,11 +3103,17 @@ document.getElementById('saveAllCasesBtn').addEventListener('click', async () =>
       if (result.success) {
         savedCount++;
         if (addToQueue && result.id) {
-          const queued = await addCaseToAcgmeQueue(result.id);
-          if (queued) {
-            queuedCount++;
-          } else {
+          const missingFields = getMissingAcgmeFields(caseData);
+          if (missingFields.length > 0) {
             queueErrorCount++;
+            console.warn(`Case ${result.id} not queued — missing: ${missingFields.join(', ')}`);
+          } else {
+            const queued = await addCaseToAcgmeQueue(result.id);
+            if (queued) {
+              queuedCount++;
+            } else {
+              queueErrorCount++;
+            }
           }
         } else if (addToQueue) {
           queueErrorCount++;
@@ -3211,6 +3269,21 @@ document.getElementById('submitToAcgmeBtn')?.addEventListener('click', async () 
     return;
   }
 
+  // Validate required fields before queuing
+  const invalidCases = [];
+  for (const id of selectedIds) {
+    const c = casesCache.find(x => String(x.id) === String(id));
+    if (!c) continue;
+    const missing = getMissingAcgmeFields(c);
+    if (missing.length > 0) {
+      invalidCases.push(`Case #${c.id} (${c.procedure_name || 'unknown'}): missing ${missing.join(', ')}`);
+    }
+  }
+  if (invalidCases.length > 0) {
+    alert(`Cannot queue — the following cases have missing required fields:\n\n${invalidCases.join('\n')}\n\nPlease edit and fix these cases before queuing.`);
+    return;
+  }
+
   try {
     // Add to queue
     const response = await fetch('/api/acgme-queue', {
@@ -3234,6 +3307,15 @@ Total in queue: ${result.queueLength}
 In Claude Code, say: "process ACGME queue"
 
 (Command copied to clipboard)`);
+
+      // Update queue badge
+      const badge = document.getElementById('acgmeQueueBadge');
+      if (badge && result.queueLength > 0) {
+        badge.textContent = result.queueLength;
+        badge.classList.remove('hidden');
+      } else if (badge) {
+        badge.classList.add('hidden');
+      }
 
       // Uncheck all selected
       document.querySelectorAll('.case-checkbox:checked').forEach(cb => cb.checked = false);
@@ -3286,6 +3368,7 @@ async function toggleAcgmeStatus(id, currentlySubmitted) {
 
     if (result.success) {
       loadCases(); // Reload to show updated status
+      updateAcgmeQueueBadge();
     } else {
       throw new Error(result.error);
     }
@@ -3720,4 +3803,76 @@ document.getElementById('confirmImport')?.addEventListener('click', async () => 
 document.getElementById('cancelImport')?.addEventListener('click', () => {
   document.getElementById('importPreview').classList.add('hidden');
   parsedImportCases = [];
+});
+
+// ============================================
+// Insights Chat
+// ============================================
+const insightsChat = document.getElementById('insightsChat');
+const insightsInput = document.getElementById('insightsInput');
+const insightsSendBtn = document.getElementById('insightsSendBtn');
+let insightsHistory = [];
+
+function appendChatMsg(role, content) {
+  const div = document.createElement('div');
+  div.className = `chat-msg ${role}`;
+  if (role === 'assistant') {
+    div.innerHTML = content;
+  } else {
+    div.textContent = content;
+  }
+  insightsChat.appendChild(div);
+  insightsChat.scrollTop = insightsChat.scrollHeight;
+  return div;
+}
+
+async function sendInsightsQuestion(question) {
+  if (!question.trim()) return;
+  appendChatMsg('user', question);
+  insightsInput.value = '';
+  insightsInput.disabled = true;
+  insightsSendBtn.disabled = true;
+
+  const thinkingEl = appendChatMsg('thinking', 'Querying your cases...');
+
+  try {
+    const response = await fetch('/api/insights', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ question, history: insightsHistory })
+    });
+    const result = await response.json();
+    thinkingEl.remove();
+
+    if (result.success) {
+      insightsHistory.push({ role: 'user', content: question });
+      insightsHistory.push({ role: 'assistant', content: result.answer });
+      appendChatMsg('assistant', result.answer);
+    } else {
+      appendChatMsg('assistant', 'Error: ' + (result.error || 'Something went wrong.'));
+    }
+  } catch (error) {
+    thinkingEl.remove();
+    appendChatMsg('assistant', 'Error: Could not reach the server.');
+  }
+
+  insightsInput.disabled = false;
+  insightsSendBtn.disabled = false;
+  insightsInput.focus();
+}
+
+insightsSendBtn?.addEventListener('click', () => {
+  sendInsightsQuestion(insightsInput.value);
+});
+
+insightsInput?.addEventListener('keydown', (e) => {
+  if (e.key === 'Enter') {
+    sendInsightsQuestion(insightsInput.value);
+  }
+});
+
+document.querySelectorAll('.suggestion-chip').forEach(chip => {
+  chip.addEventListener('click', () => {
+    sendInsightsQuestion(chip.dataset.q);
+  });
 });

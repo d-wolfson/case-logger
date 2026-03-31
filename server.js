@@ -562,10 +562,13 @@ Respond in this EXACT JSON format (no markdown, no code blocks, just pure JSON a
   return cases;
 }
 
-// Extract case data WITHOUT CPT matching (for streaming endpoint)
-async function extractCaseDataOnly(imageBuffer, mimeType) {
+// Extract case data WITH CPT matching in a single API call (for streaming endpoint)
+async function extractCaseDataWithCPT(imageBuffer, mimeType) {
   const model = genAI.getGenerativeModel({ model: 'gemini-3-flash-preview' });
   const base64Image = imageBuffer.toString('base64');
+
+  // Build condensed CPT list for the prompt
+  const cptList = CPT_REFERENCE.map(c => `${c.code}: ${c.description}`).join('\n');
 
   const prompt = `You are a medical data extraction assistant helping a neurosurgery resident log their surgical cases.
 
@@ -584,10 +587,22 @@ For EACH case, extract:
 8. Laterality (Right, Left, Bilateral, or N/A)
 9. Procedure Duration - specifically the "Proc Duration" column if visible
 10. Anesthesia Staff (names)
+11. CPT Code - match the procedure to the BEST code from the CPT list below
 
 ${NEUROSURGERY_ATTENDINGS_TEXT}
 
 ${CASE_CATEGORIES_TEXT}
+
+CPT CODE MATCHING RULES:
+- Cranioplasty (placing/reconstructing with implant) = 62141 (>5cm, standard), NOT 62142 (removal)
+- Posterior cervical fusion = 22600
+- Posterior lumbar fusion = 22612
+- ACDF (anterior cervical) = 22551
+- Choose the MOST SPECIFIC code matching the procedure
+- If patient is pediatric (<18), prefer pediatric codes if available
+
+AVAILABLE CPT CODES:
+${cptList}
 
 CRITICAL INSTRUCTIONS:
 - Return an ARRAY of case objects (even if only one case)
@@ -608,7 +623,9 @@ Respond in this EXACT JSON format (no markdown, no code blocks, just pure JSON a
     "laterality": "Right, Left, Bilateral, or N/A",
     "case_duration": "in MINUTES only (convert hours to minutes, e.g. 1:30 becomes 90) or Not found",
     "anesthesia_staff": "names or Not found",
-    "raw_text": "brief summary for this case"
+    "raw_text": "brief summary for this case",
+    "cpt_code": "best CPT code from list",
+    "cpt_confidence": "high, medium, or low"
   }
 ]`;
 
@@ -641,6 +658,18 @@ Respond in this EXACT JSON format (no markdown, no code blocks, just pure JSON a
 
   const parsed = JSON.parse(jsonStr.trim());
   const cases = Array.isArray(parsed) ? parsed : [parsed];
+
+  // Fill in CPT descriptions from our reference
+  cases.forEach(caseData => {
+    if (caseData.cpt_code && CPT_BY_CODE[caseData.cpt_code]) {
+      caseData.cpt_inferred_note = CPT_BY_CODE[caseData.cpt_code].description;
+      console.log(`   ✓ "${(caseData.procedure_name || '').substring(0, 40)}..." → ${caseData.cpt_code} (${caseData.cpt_confidence || 'unknown'})`);
+    } else {
+      caseData.cpt_code = '';
+      caseData.cpt_inferred_note = '';
+    }
+    delete caseData.cpt_confidence;
+  });
 
   return cases;
 }
@@ -745,29 +774,20 @@ app.post('/api/upload-stream', upload.array('images', 10), async (req, res) => {
     sendEvent('start', { imageCount });
     console.log(`📷 Processing ${imageCount} image(s) with streaming...`);
 
-    // STEP 1: Extract cases from all images (parallel)
+    // Extract cases + CPT codes from all images in ONE API call each (parallel)
     sendEvent('progress', { stage: 'extracting', message: `Analyzing ${imageCount} image${imageCount > 1 ? 's' : ''}...` });
 
     const extractionPromises = req.files.map(async (file, index) => {
       console.log(`   📷 [${index + 1}/${imageCount}] ${file.originalname}`);
-      // Extract WITHOUT CPT matching first
-      const cases = await extractCaseDataOnly(file.buffer, file.mimetype);
+      const cases = await extractCaseDataWithCPT(file.buffer, file.mimetype);
       return cases.map(c => ({ ...c, _sourceFile: file.originalname }));
     });
 
     const resultsArrays = await Promise.all(extractionPromises);
     const allCases = resultsArrays.flat();
 
-    sendEvent('progress', { stage: 'extracted', message: `Found ${allCases.length} case${allCases.length > 1 ? 's' : ''}!`, caseCount: allCases.length });
-    console.log(`📋 Extracted ${allCases.length} case(s) - now matching CPT codes...`);
-
-    // STEP 2: Match ALL CPT codes in ONE API call
-    sendEvent('progress', { stage: 'cpt', message: `Matching CPT codes for ${allCases.length} case${allCases.length > 1 ? 's' : ''}...` });
-    console.log('🔍 Matching all CPT codes in single API call...');
-
-    await matchAllProceduresToCPT(allCases);
-
-    sendEvent('progress', { stage: 'cpt', message: `Matched all ${allCases.length} CPT codes!`, cptMatched: allCases.length, total: allCases.length });
+    sendEvent('progress', { stage: 'extracted', message: `Found ${allCases.length} case${allCases.length > 1 ? 's' : ''} with CPT codes!`, caseCount: allCases.length });
+    console.log(`📋 Extracted ${allCases.length} case(s) with CPT codes`);
 
     sendEvent('complete', { cases: allCases, imageCount });
     console.log(`✅ Complete: ${allCases.length} cases with CPT codes`);
@@ -1097,6 +1117,31 @@ app.get('/api/acgme-queue', (req, res) => {
   } catch (error) {
     console.error('Error fetching queue:', error);
     res.status(500).json({ error: 'Failed to fetch queue' });
+  }
+});
+
+// Route: Get ACGME queue count (lightweight - for badge)
+app.get('/api/acgme-queue-count', (req, res) => {
+  try {
+    const queue = loadAcgmeQueue();
+    res.json({ count: queue.length });
+  } catch (error) {
+    res.json({ count: 0 });
+  }
+});
+
+// Route: Get follow-up due count (lightweight - for badge)
+app.get('/api/followup-count', (req, res) => {
+  try {
+    const today = new Date().toISOString().split('T')[0];
+    const results = db.exec(
+      `SELECT COUNT(*) as cnt FROM cases WHERE follow_up_status = 'due' AND (follow_up_due_date <= ? OR follow_up_due_date IS NULL OR follow_up_due_date = '')`,
+      [today]
+    );
+    const count = results.length > 0 && results[0].values.length > 0 ? results[0].values[0][0] : 0;
+    res.json({ count });
+  } catch (error) {
+    res.json({ count: 0 });
   }
 });
 
@@ -1495,8 +1540,12 @@ app.post('/api/cases/:id/mark-submitted', (req, res) => {
     const id = req.params.id;
     db.run(`UPDATE cases SET submitted_to_acgme = 1 WHERE id = ?`, [id]);
     saveDatabase();
+    // Also remove from ACGME queue
+    const queue = loadAcgmeQueue();
+    const updated = queue.filter(qId => qId !== Number(id));
+    saveAcgmeQueue(updated);
     console.log('✅ Case marked as submitted to ACGME:', id);
-    res.json({ success: true, message: 'Case marked as submitted' });
+    res.json({ success: true, message: 'Case marked as submitted', queueLength: updated.length });
   } catch (error) {
     console.error('❌ Error marking case as submitted:', error);
     res.status(500).json({ error: 'Failed to mark case as submitted' });
@@ -1652,7 +1701,132 @@ app.delete('/api/images/:imageId', (req, res) => {
 });
 
 // --------------------------------------------
-// STEP 9: Start the server
+// STEP 9: Natural Language Case Insights (Chat)
+// --------------------------------------------
+app.post('/api/insights', async (req, res) => {
+  try {
+    const { question, history } = req.body;
+    if (!question) {
+      return res.status(400).json({ error: 'No question provided' });
+    }
+
+    const model = genAI.getGenerativeModel({ model: 'gemini-3-flash-preview' });
+
+    // Build conversation context for follow-up questions
+    const priorContext = (history || []).length > 0
+      ? '\nCONVERSATION SO FAR:\n' + (history || []).map(m => `${m.role.toUpperCase()}: ${m.content}`).join('\n') + '\n'
+      : '';
+
+    // Step 1: Convert natural language to SQL
+    const sqlPrompt = `You are a SQL assistant for a neurosurgery case log database. Convert the user's natural language question into a SQLite SELECT query.
+
+DATABASE SCHEMA:
+Table: cases
+  id INTEGER PRIMARY KEY
+  date_of_surgery TEXT  -- YYYY-MM-DD format
+  patient_mrn TEXT
+  patient_age TEXT      -- numeric age as text
+  patient_gender TEXT   -- "Male" or "Female"
+  attending_surgeon TEXT -- last name only (e.g. "Munich", "Fontes", "Traynelis")
+  procedure_name TEXT   -- full procedure description
+  cpt_code TEXT         -- e.g. "63012"
+  cpt_inferred_note TEXT -- CPT description
+  case_category TEXT    -- ACGME category, one of:
+                        --   "Cranial: Tumor General", "Cranial: Tumor Sellar/Parasellar",
+                        --   "Cranial: Trauma/Other", "Cranial: Vascular Open",
+                        --   "Cranial: Vascular Endovascular", "Cranial: Vascular Total",
+                        --   "Cranial: CSF Diversion/ETV/Other",
+                        --   "Cranial/Extracranial: Pain", "Cranial/Extracranial: Functional Disorders",
+                        --   "Cranial/Extracranial: Epilepsy",
+                        --   "Spinal: Anterior Cervical", "Spinal: Posterior Cervical",
+                        --   "Spinal: Thoracic/Lumbar/Sacral Instrumentation Fusion",
+                        --   "Spinal: Lumbar Laminectomy/Laminotomy",
+                        --   "Spinal: Stimulation/Lesion/Pump/Other",
+                        --   "Peripheral Nerve",
+                        --   "Pediatric: Cranial Tumor", "Pediatric: Cranial Trauma/Other",
+                        --   "Pediatric: CSF Diversion/ETV/Other", "Pediatric: Spine"
+  laterality TEXT       -- "Right", "Left", "Bilateral", or "N/A"
+  case_duration TEXT    -- minutes as text
+  submitted_to_acgme INTEGER -- 1 = submitted, 0 = pending
+  follow_up_status TEXT -- "none", "due", or "done"
+  follow_up_due_date TEXT -- YYYY-MM-DD
+  other_details TEXT    -- free text notes
+
+CONTEXT:
+- Today's date: ${new Date().toISOString().split('T')[0]}
+- PGY-4 (July 2023 – June 2024) was a research year with no clinical cases
+- "Shunt" cases are in category "Cranial: CSF Diversion/ETV/Other" or have "shunt" in procedure_name
+- Use LIKE with % for fuzzy text matching on procedure_name or other_details
+- case_duration is stored as text; cast to INTEGER for math
+
+RULES:
+- Output ONLY a single valid SQLite SELECT statement, nothing else. No explanation, no markdown.
+- Never write INSERT, UPDATE, DELETE, DROP, or ALTER statements.
+- If the question cannot be answered from this schema, output exactly: SELECT 'UNANSWERABLE' as error;
+- If there is prior conversation context, use it to resolve references like "those", "that", "the same but for...", etc.
+${priorContext}
+USER QUESTION: ${question}`;
+
+    const sqlResult = await model.generateContent(sqlPrompt);
+    let sql = sqlResult.response.text().trim();
+    sql = sql.replace(/^```(?:sql)?\s*/i, '').replace(/\s*```$/i, '').trim();
+
+    console.log('📊 Insights SQL:', sql);
+
+    // Safety check
+    if (/\b(INSERT|UPDATE|DELETE|DROP|ALTER|CREATE)\b/i.test(sql)) {
+      return res.json({ success: true, answer: 'Sorry, I can only run read-only queries on your data.' });
+    }
+
+    // Step 2: Execute the SQL
+    let queryResults;
+    try {
+      queryResults = db.exec(sql);
+    } catch (sqlError) {
+      console.error('❌ SQL execution error:', sqlError.message);
+      return res.json({ success: true, answer: `I had trouble querying your data. Could you rephrase the question?\n\n(SQL error: ${sqlError.message})` });
+    }
+
+    // Format results
+    let resultText = 'No results found.';
+    if (queryResults.length > 0 && queryResults[0].values.length > 0) {
+      const cols = queryResults[0].columns;
+      const rows = queryResults[0].values;
+      if (rows[0][0] === 'UNANSWERABLE') {
+        return res.json({ success: true, answer: "I can't answer that from your case data. Try asking about case counts, breakdowns by attending/category/CPT, trends over time, or specific procedures." });
+      }
+      resultText = `Columns: ${cols.join(', ')}\nRows (${rows.length}):\n${JSON.stringify(rows)}`;
+    }
+
+    // Step 3: Summarize results in natural language
+    const summaryPrompt = `You are a helpful assistant for a neurosurgery resident. The user asked a question about their surgical case log, and a SQL query was run against their database.
+${priorContext}
+USER QUESTION: ${question}
+
+SQL QUERY: ${sql}
+
+QUERY RESULTS:
+${resultText}
+
+INSTRUCTIONS:
+- Summarize the results in a clear, concise, human-readable answer.
+- When showing breakdowns with more than 3 items, use a simple HTML table (<table>, <tr>, <th>, <td> tags).
+- For simple counts or single values, just state the answer plainly.
+- Do NOT include any markdown formatting (no **, ##, \`\`\`, etc.) — use plain text or HTML only.
+- Keep it short and focused.`;
+
+    const summaryResult = await model.generateContent(summaryPrompt);
+    const answer = summaryResult.response.text();
+
+    res.json({ success: true, answer });
+  } catch (error) {
+    console.error('❌ Insights error:', error);
+    res.status(500).json({ error: 'Failed to generate insight: ' + error.message });
+  }
+});
+
+// --------------------------------------------
+// STEP 10: Start the server
 // --------------------------------------------
 async function startServer() {
   await initDatabase();

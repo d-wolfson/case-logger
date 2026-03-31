@@ -21,8 +21,11 @@
       <button class="tab" data-tab="followup">
         Follow-Up <span class="tab-badge hidden" id="followupBadge">0</span>
       </button>
-      <button class="tab" data-tab="acgme-queue">ACGME Queue</button>
+      <button class="tab" data-tab="acgme-queue">
+        ACGME Queue <span class="tab-badge hidden" id="acgmeQueueBadge">0</span>
+      </button>
       <button class="tab" data-tab="stats">Stats</button>
+      <button class="tab" data-tab="insights">Insights</button>
       <button class="tab" data-tab="export">Export/Import</button>
     </nav>
 
@@ -464,6 +467,29 @@
             <h3>Monthly Trends</h3>
             <div id="statsByMonth" class="stats-breakdown"></div>
           </div>
+        </div>
+      </div>
+    </section>
+
+    <!-- Insights Tab -->
+    <section id="insights" class="tab-content">
+      <div class="insights-view">
+        <h2>Case Insights</h2>
+        <p class="info">Ask questions about your case data in plain English.</p>
+        <div id="insightsChat" class="insights-chat">
+          <!-- Chat messages render here -->
+        </div>
+        <div class="insights-input-row">
+          <input type="text" id="insightsInput" placeholder="e.g., How many spine cases did I do with Munich this year?" autocomplete="off">
+          <button class="btn primary" id="insightsSendBtn">Ask</button>
+        </div>
+        <div class="insights-suggestions">
+          <button class="suggestion-chip" data-q="How many cases have I logged total?">Total cases</button>
+          <button class="suggestion-chip" data-q="What are my top 5 CPT codes?">Top CPT codes</button>
+          <button class="suggestion-chip" data-q="How many cases per attending?">Cases by attending</button>
+          <button class="suggestion-chip" data-q="What's my case breakdown by category?">By category</button>
+          <button class="suggestion-chip" data-q="How many cases are still pending ACGME submission?">Pending ACGME</button>
+          <button class="suggestion-chip" data-q="Show my monthly case volume trend">Monthly trend</button>
         </div>
       </div>
     </section>
