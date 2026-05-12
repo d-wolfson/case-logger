@@ -1,0 +1,38 @@
+{
+  "queue": [1002, 1001, 1003],
+  "cases": [
+    {
+      "id": 1001,
+      "date_of_surgery": "2026-01-03",
+      "patient_mrn": "SAMPLE001",
+      "patient_age": "67",
+      "patient_gender": "Female",
+      "attending_surgeon": "Wang",
+      "procedure_name": "Anterior cervical discectomy and fusion C3-4",
+      "cpt_code": "22551",
+      "case_category": "Spinal: Anterior Cervical"
+    },
+    {
+      "id": 1002,
+      "date_of_surgery": "2026-01-02",
+      "patient_mrn": "SAMPLE002",
+      "patient_age": "16",
+      "patient_gender": "Male",
+      "attending_surgeon": "Mallela",
+      "procedure_name": "Suboccipital craniectomy for Chiari decompression",
+      "cpt_code": "61343",
+      "case_category": "Pediatric: Cranial Trauma/Other"
+    },
+    {
+      "id": 1003,
+      "date_of_surgery": "2026-01-04",
+      "patient_mrn": "SAMPLE003",
+      "patient_age": "59",
+      "patient_gender": "Female",
+      "attending_surgeon": "Sierens",
+      "procedure_name": "Lumbar laminectomy and biopsy",
+      "cpt_code": "63277",
+      "case_category": "Spinal: Lumbar Laminectomy/Laminotomy"
+    }
+  ]
+}

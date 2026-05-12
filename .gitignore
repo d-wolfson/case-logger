@@ -9,12 +9,19 @@ database.db
 
 # Epic weekly reports and cleaned case CSVs (contain patient data)
 epic_reports/
+procedure-update-*.csv
+case-log-export-*.xlsx
+*.bak
+database.db.bak-*
 
 # Uploaded images (contains patient imaging)
 uploads/
 
 # Restore temp
 restore_tmp/
+
+# Local backups (contain patient data)
+backups/
 
 # Queue file
 acgme-queue.json

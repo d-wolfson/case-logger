@@ -31,7 +31,7 @@ const genAI = new GoogleGenerativeAI(process.env.GEMINI_API_KEY);
 // STEP 3: Set up the web server
 // --------------------------------------------
 const app = express();
-const PORT = 3000;  // Your app will run at http://localhost:3000
+const PORT = Number(process.env.PORT || 3000);  // Your app will run at http://localhost:3000 by default
 const DB_PATH = path.join(__dirname, 'database.db');
 
 // Serve static files (HTML, CSS, JS) from the "public" folder

@@ -39,13 +39,25 @@ AI-powered surgical case logging app for neurosurgery residents. Upload OR scree
    ```
 3. Create a `.env` file in the project root:
    ```bash
-   GEMINI_API_KEY=your_api_key_here
+   cp .env.example .env
    ```
+   Then edit `.env` and set `GEMINI_API_KEY`.
 4. Start the server:
    ```bash
    npm start
    ```
 5. Open http://localhost:3000
+
+### Reproducibility Checks
+
+Run these on a fresh clone:
+
+```bash
+npm run doctor
+npm run validate
+```
+
+`doctor` checks local readiness, data-safety ignore patterns, server reachability, and Chrome automation configuration. `validate` runs offline syntax checks and verifies the anonymized ACGME fixture.
 
 ## Step-by-Step Usage (New User)
 
@@ -86,44 +98,68 @@ Tips:
 2. Click **Download Backup** to save a zip of `database.db`, `uploads/`, and `acgme-queue.json`.
 3. To restore, click **Restore Backup** and select the zip (this replaces current data).
 
-## ACGME Submission Workflow (Codex)
-This project uses a Codex browser automation workflow to submit queued cases into ACGME.
+## ACGME Submission Workflow (Claude Or Codex)
+This project supports Claude or Codex browser automation to submit queued cases into ACGME.
 
 1. In the app, select cases in **My Cases** and click **Submit to ACGME**.
 2. This adds them to a local queue.
 3. Log into ACGME in Chrome and open the Case Entry page.
-4. In your Codex session, say:
+4. In Claude or Codex, say:
    ```
    process ACGME queue
    ```
-5. Codex will validate the queue, control Chrome, and autofill each case.
+5. The agent will validate the queue, control Chrome, and autofill each case.
 6. On success, cases are marked as submitted in the local database.
 
-The first Codex run should use supervised pilot mode: Codex fills one case and pauses before final submit so you can verify the ACGME form. After that, you can authorize full auto-submit for the queue.
+The first run on a new machine/browser session should use supervised pilot mode: the agent fills one case and pauses before final submit so you can verify the ACGME form. After that, you can authorize full auto-submit for the queue.
 
 Note: Attending site logic is automatic (Towner/Sierens = John H. Stroger Jr. Hospital of Cook County; all others = Rush University Medical Center).
+
+Canonical workflow docs:
+- `docs/acgme-workflow.md`
+- `docs/browser-automation.md`
+- `AGENTS.md` for Codex
+- `CLAUDE.md` for Claude
 
 ## Data Notes
 - Dates are standardized to YYYY-MM-DD.
 - Attending names are stored as last name only.
 - Local data lives in `database.db` and `uploads/`.
+- Sensitive local data is ignored by git. See `docs/data-safety.md`.
+
+## Useful Commands
+
+```bash
+npm run doctor
+npm run validate
+npm run backup
+npm run restore -- backups/example.zip
+npm run acgme:sample
+npm run acgme:next
+npm run acgme:chrome:check
+npm run acgme:chrome:fill-next
+npm run acgme:chrome:run-queue
+```
 
 ## Project Structure
 ```
 case-logger/
 ├── server.js
-├── database.db
-├── acgme-queue.json
-├── uploads/
+├── docs/
+├── fixtures/
+├── scripts/
 ├── public/
 │   ├── index.html
 │   ├── style.css
 │   └── app.js
-└── .env
+├── AGENTS.md
+├── CLAUDE.md
+└── .env.example
 ```
 
 ## Environment Variables
 - `GEMINI_API_KEY`: Google AI API key
+- `PORT`: Optional server port override; defaults to `3000`
 
 ## License
 Private / internal use.

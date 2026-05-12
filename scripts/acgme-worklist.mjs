@@ -7,6 +7,7 @@ const DEFAULT_BASE_URL = 'http://localhost:3000';
 function parseArgs(argv) {
   const args = {
     baseUrl: process.env.CASE_LOGGER_URL || DEFAULT_BASE_URL,
+    fixture: null,
     json: false,
     next: false,
     markSubmitted: null,
@@ -16,6 +17,8 @@ function parseArgs(argv) {
     const arg = argv[i];
     if (arg === '--base-url') {
       args.baseUrl = argv[++i];
+    } else if (arg === '--fixture') {
+      args.fixture = argv[++i];
     } else if (arg === '--json') {
       args.json = true;
     } else if (arg === '--next') {
@@ -36,10 +39,12 @@ function parseArgs(argv) {
 function printHelp() {
   console.log(`Usage:
   node scripts/acgme-worklist.mjs [--next] [--json]
+  node scripts/acgme-worklist.mjs --fixture fixtures/sample-cases.json [--next] [--json]
   node scripts/acgme-worklist.mjs --mark-submitted CASE_ID
 
 Options:
   --base-url URL          Case Logger base URL (default: ${DEFAULT_BASE_URL})
+  --fixture PATH          Read a saved queue payload instead of the local server
   --next                 Print only the next chronological valid case
   --json                 Emit JSON instead of a text summary
   --mark-submitted ID    Mark one local case submitted after verified ACGME success`);
@@ -166,6 +171,12 @@ async function getWorklist(baseUrl) {
   return chronologicalCases(payload);
 }
 
+async function getWorklistFromFixture(fixturePath) {
+  const { readFile } = await import('node:fs/promises');
+  const payload = JSON.parse(await readFile(fixturePath, 'utf8'));
+  return chronologicalCases(payload);
+}
+
 async function markSubmitted(baseUrl, caseId) {
   return fetchJson(`${baseUrl.replace(/\/$/, '')}/api/cases/${caseId}/mark-submitted`, {
     method: 'POST',
@@ -212,7 +223,9 @@ async function main() {
     return;
   }
 
-  const worklist = await getWorklist(args.baseUrl);
+  const worklist = args.fixture
+    ? await getWorklistFromFixture(args.fixture)
+    : await getWorklist(args.baseUrl);
   const output = args.next ? worklist.slice(0, 1) : worklist;
 
   if (args.json) {
@@ -234,6 +247,7 @@ export {
   chronologicalCases,
   formatAcgmeDate,
   getWorklist,
+  getWorklistFromFixture,
   markSubmitted,
   normalizeCase,
 };

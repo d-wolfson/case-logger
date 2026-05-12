@@ -5,8 +5,13 @@
   "main": "server.js",
   "scripts": {
     "start": "node server.js",
+    "doctor": "node scripts/doctor.mjs",
+    "validate": "node scripts/validate.mjs",
+    "backup": "node scripts/backup-local.mjs",
+    "restore": "node scripts/restore-local.mjs",
     "acgme:queue": "node scripts/acgme-worklist.mjs",
     "acgme:next": "node scripts/acgme-worklist.mjs --next",
+    "acgme:sample": "node scripts/acgme-worklist.mjs --fixture fixtures/sample-cases.json",
     "acgme:chrome:check": "node scripts/acgme-chrome.mjs check",
     "acgme:chrome:inspect": "node scripts/acgme-chrome.mjs inspect",
     "acgme:chrome:fill-next": "node scripts/acgme-chrome.mjs fill-next",
