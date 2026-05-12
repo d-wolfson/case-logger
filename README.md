@@ -113,7 +113,7 @@ This project supports Claude or Codex browser automation to submit queued cases 
 
 The first run on a new machine/browser session should use supervised pilot mode: the agent fills one case and pauses before final submit so you can verify the ACGME form. After that, you can authorize full auto-submit for the queue.
 
-Note: Attending site logic is automatic (Towner/Sierens = John H. Stroger Jr. Hospital of Cook County; all others = Rush University Medical Center).
+Note: attending-to-site mapping is automatic and documented in `docs/acgme-workflow.md`.
 
 Canonical workflow docs:
 - `docs/acgme-workflow.md`
