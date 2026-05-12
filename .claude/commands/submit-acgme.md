@@ -69,6 +69,8 @@ Use browser automation tools in this order:
 
 7. **Attending**: This is a searchable dropdown
    - Type the attending's last name and select from results (applies to all attendings including Towner/Sierens)
+   - If attending is "Wang", select "Wang, Timothy" (do NOT select "Wang, Dian")
+   - If the attending does not appear in the dropdown, select "Other, Attending_"
    - (Persists between submissions - only change if different from previous case)
 
 8. **Patient Type**: Set based on age
@@ -124,7 +126,7 @@ After marking as submitted, the form should reset. Repeat from Step 2 for the ne
 | - | Case Year | - | Already "6", don't change |
 | - | Role | - | Already "Lead Resident Surgeon" |
 | attending_surgeon | Site | 2nd | "John H. Stroger Jr. Hospital of Cook County" if Towner/Sierens |
-| attending_surgeon | Attending | 3rd | Search by last name (all attendings) |
+| attending_surgeon | Attending | 3rd | Search by last name; Wang = Wang, Timothy; fallback = Other, Attending_ |
 | patient_age | Patient Type | 4th | Only change if pediatric (<18) |
 | cpt_code | Code or Keyword | 5th | Search and Add |
 | case_category | Microdissection | 6th | Check BEFORE Add if tumor or MVD case |
@@ -135,7 +137,7 @@ After marking as submitted, the form should reset. Repeat from Step 2 for the ne
 ## Error Handling
 
 - If CPT code search returns no results, log a warning and skip that case
-- If attending name not found, try partial match or skip
+- If attending name not found, select "Other, Attending_" and continue
 - If form submission fails, do NOT mark as submitted
 - Take screenshots at key steps for debugging
 - **Always verify the Case Date shows the correct value before clicking Submit**
@@ -144,7 +146,7 @@ After marking as submitted, the form should reset. Repeat from Step 2 for the ne
 ## Known ACGME Form Quirks
 
 1. **Date field resets**: The Case Date input gets overwritten when other form fields change. Always set it as the very last step before Submit.
-2. **Attending dropdown**: Search by last name for all attendings regardless of site.
+2. **Attending dropdown**: Search by last name for all attendings regardless of site. Wang means Wang, Timothy; if no result appears, use Other, Attending_.
 3. **Fields persist**: Role, Site, Attending, and Patient Type carry over between submissions - only change if different from previous case.
 4. **Use refs, not coordinates**: Always use `find` to get element refs rather than clicking by coordinate. The form layout shifts as sections expand/collapse.
 5. **Case ID cross-contamination**: JavaScript-based date setting (via nativeInputValueSetter) can accidentally write to the Case ID field if using array index selectors. Always use `form_input` with a ref instead, and verify Case ID after setting the date.

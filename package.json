@@ -4,7 +4,13 @@
   "description": "Neurosurgery case logging app with AI-powered data extraction",
   "main": "server.js",
   "scripts": {
-    "start": "node server.js"
+    "start": "node server.js",
+    "acgme:queue": "node scripts/acgme-worklist.mjs",
+    "acgme:next": "node scripts/acgme-worklist.mjs --next",
+    "acgme:chrome:check": "node scripts/acgme-chrome.mjs check",
+    "acgme:chrome:inspect": "node scripts/acgme-chrome.mjs inspect",
+    "acgme:chrome:fill-next": "node scripts/acgme-chrome.mjs fill-next",
+    "acgme:chrome:run-queue": "node scripts/acgme-chrome.mjs run-queue"
   },
   "dependencies": {
     "@google/generative-ai": "^0.21.0",

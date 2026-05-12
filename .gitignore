@@ -7,6 +7,9 @@ node_modules/
 # Database (contains patient data)
 database.db
 
+# Epic weekly reports and cleaned case CSVs (contain patient data)
+epic_reports/
+
 # Uploaded images (contains patient imaging)
 uploads/
 

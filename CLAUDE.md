@@ -55,6 +55,8 @@ Munich, Fontes, Sani, Mallela, Wang, Dewald, Deutsch, O'Toole, Munoz, Chen, Crow
 
 - **Towner and Sierens** use Site = "John H. Stroger Jr. Hospital of Cook County" in ACGME (not Rush)
 - All others use Site = "Rush University Medical Center"
+- If attending is **Wang**, select "Wang, Timothy" in ACGME (not "Wang, Dian")
+- If an attending does not appear in the ACGME dropdown, select "Other, Attending_"
 
 ### ACGME Submission Rules
 - Date field must be set LAST (form resets it when other fields change)

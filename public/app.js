@@ -3304,7 +3304,7 @@ document.getElementById('submitToAcgmeBtn')?.addEventListener('click', async () 
 
 Total in queue: ${result.queueLength}
 
-In Claude Code, say: "process ACGME queue"
+In Codex, say: "process ACGME queue"
 
 (Command copied to clipboard)`);
 

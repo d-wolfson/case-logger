@@ -86,19 +86,22 @@ Tips:
 2. Click **Download Backup** to save a zip of `database.db`, `uploads/`, and `acgme-queue.json`.
 3. To restore, click **Restore Backup** and select the zip (this replaces current data).
 
-## ACGME Submission Workflow (Claude Code)
-This project uses a Claude Code browser automation workflow to submit cases into ACGME.
+## ACGME Submission Workflow (Codex)
+This project uses a Codex browser automation workflow to submit queued cases into ACGME.
 
 1. In the app, select cases in **My Cases** and click **Submit to ACGME**.
 2. This adds them to a local queue.
-3. In your Claude Code session, run:
+3. Log into ACGME in Chrome and open the Case Entry page.
+4. In your Codex session, say:
    ```
    process ACGME queue
    ```
-4. Claude will open the ACGME site and autofill each case.
-5. On success, cases are marked as submitted in the local database.
+5. Codex will validate the queue, control Chrome, and autofill each case.
+6. On success, cases are marked as submitted in the local database.
 
-Note: Attending site logic is automatic (Towner/Sierens = Other; all others = Rush University Medical Center).
+The first Codex run should use supervised pilot mode: Codex fills one case and pauses before final submit so you can verify the ACGME form. After that, you can authorize full auto-submit for the queue.
+
+Note: Attending site logic is automatic (Towner/Sierens = John H. Stroger Jr. Hospital of Cook County; all others = Rush University Medical Center).
 
 ## Data Notes
 - Dates are standardized to YYYY-MM-DD.
